@@ -11,6 +11,7 @@ import { useStore } from 'zustand'
 import { AnimatePresence, motion } from 'motion/react'
 import { useLocation, useNavigate } from 'react-router'
 import type { StarCatalog } from '@inertialref/universe'
+import { cloudsServed } from '@inertialref/rendering'
 import { BUILD_ID, SERVED_TREE } from './build.ts'
 import { DEFAULT_FOV_DEG, GameEngine } from './engine/GameEngine.ts'
 import type { HudCommands, HudRenderState } from './hud/controls.ts'
@@ -26,6 +27,7 @@ import { recordEvent } from './telemetry/client.ts'
 import { bindEngineKnobs } from './state/engineKnobs.ts'
 import {
   DEBUG_ON,
+  RENDER_CLOUDS,
   RENDER_PICTURE,
   RENDER_HDR,
   RENDER_SENSOR,
@@ -58,6 +60,13 @@ import {
   createRenderer,
   releaseRenderer,
 } from './render/createRenderer.ts'
+import { OVER_CLOUDS_LAYER } from './render/cloudLayers.ts'
+import {
+  canvasClouds,
+  type CloudsLoaders,
+  cloudRendererOf,
+  SETTING_CLOUDS,
+} from './render/canvasClouds.ts'
 import {
   dprCeiling,
   type OutputPreference,
@@ -101,6 +110,21 @@ import {
  */
 
 let singleton: GameEngine | null = null
+
+/**
+ * The two cloud chunks, each its own `import()` so the page loads neither
+ * until a canvas asks. `cloudsServed` is handed in rather than imported by
+ * the takram chunk, which would re-partition the page's chunks.
+ */
+const CLOUD_LOADERS: CloudsLoaders = {
+  native: () =>
+    import('./render/cloudSystem.ts').then((chunk) => chunk.createCloudSystem),
+  takram: (preset) =>
+    import('./render/clouds.ts').then((chunk) =>
+      chunk.loadClouds(cloudsServed, preset),
+    ),
+  webgpu: () => 'gpu' in navigator,
+}
 
 function engineInstance(catalog: StarCatalog): GameEngine {
   if (singleton !== null) return singleton
@@ -254,6 +278,19 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     new URLSearchParams(window.location.search).get(QUERY.picture),
   )
   const [pictureOverride] = useState(() => parsePictureQuery(pictureQuery))
+  // A link's `?clouds=` holds for the page's lifetime and writes nothing
+  // back; without one the setting chooses, and the canvas is built again
+  // when it changes, as it is for the output range.
+  const [cloudsRequested] = useState(() =>
+    cloudRendererOf(
+      new URLSearchParams(window.location.search).get(QUERY.clouds),
+    ),
+  )
+  const [storedClouds] = usePersistentState(RENDER_CLOUDS)
+  const clouds = cloudsRequested ?? (storedClouds ? SETTING_CLOUDS : null)
+  // One counter of canvas builds for the page, so a build superseded while
+  // its load was in flight does not publish its clouds over the next one.
+  const [cloudsCanvas] = useState(() => canvasClouds(engine, CLOUD_LOADERS))
   const picture = pictureOverride ?? storedPicture
   const pictureDiagnostic =
     pictureOverride !== null && pictureQuery?.startsWith('bilinear:')
@@ -380,9 +417,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * child-first: binding here in that phase overwrote the restored lens and
    * camera mode with the stored preferences immediately after the URL applied.
    */
+  const cloudsLinked = cloudsRequested !== null
   useLayoutEffect(
-    () => bindEngineKnobs(engine, pictureOverride),
-    [engine, pictureOverride],
+    () => bindEngineKnobs(engine, pictureOverride, cloudsLinked),
+    [engine, pictureOverride, cloudsLinked],
   )
 
   useEffect(() => {
@@ -399,7 +437,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * healthy device alive for the surviving mount. Only terminal failure
    * permits the unmount cleanup to release the device and engine workers.
    */
-  const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${canvasEpoch}`
+  const canvasKey = `${rendererKey(hdr, dynamicRangeHigh)}:${canvasEpoch}:${clouds?.kind ?? 'none'}`
 
   useEffect(
     () => () => {
@@ -584,6 +622,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     output,
     displaySize,
     pictureOverride,
+    cloudsLinked,
     onPreference: (next: OutputPreference) => {
       if (next === hdr) return
       // The renderer is rebuilt for this, so say what happened — otherwise the
@@ -763,7 +802,11 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
         // what the browser can output, builds a `WebGPURenderer` around the
         // answer and awaits `init()`; R3F awaits the promise, so nothing draws
         // against a half-built backend. See `render/createRenderer.ts`.
-        gl={lifetime.factory(hdr, picture)}
+        gl={
+          clouds !== null
+            ? cloudsCanvas.withClouds(lifetime.factory(hdr, picture), clouds)
+            : cloudsCanvas.withoutClouds(lifetime.factory(hdr, picture))
+        }
         // The factory chooses a depth convention that preserves this range.
         camera={{ fov: DEFAULT_FOV_DEG, near: 0.05, far: 1e10 }}
         // The device ratio capped by what kind of machine this is, times the
@@ -780,6 +823,11 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
           // The perf overlay's GPU measurement submits its own frames, and this
           // is the only place R3F offers the scene and camera to submit them with.
           engine.view = { scene: state.scene, camera: state.camera }
+          // Before any boot warm-up compiles against it: `compileAsync`
+          // drops an object whose layers the camera does not test, so a
+          // mark it learned of later would leave every overlay compiling at
+          // its first drawn frame.
+          if (clouds !== null) state.camera.layers.enable(OVER_CLOUDS_LAYER)
         }}
       >
         <SceneView

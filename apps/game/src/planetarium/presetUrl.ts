@@ -7,7 +7,14 @@ import {
 import { PLANETARIUM, QUERY } from '../pages/paths.ts'
 
 const MAX_SHOT_LENGTH = 16_000
-const SHOT_VERSION = '2'
+/**
+ * A link carries the presets file's version: 3 when its picture holds
+ * weather and 2 otherwise, so a link with none stays readable by a build
+ * that predates weather.
+ */
+const SHOT_VERSIONS = ['1', '2', '3'] as const
+const shotVersion = (picture: Picture): '2' | '3' =>
+  picture.weather === undefined ? '2' : '3'
 
 // Query values have no types. These leaf types keep a seed like "123" a string
 // and distinguish infinite focus from a label whose text happens to be "null".
@@ -52,6 +59,7 @@ const FIELD_TYPES = {
   'processing.range.bright': 'number',
   'processing.range.dark': 'number',
   'processing.balance': 'number',
+  'weather.regime': 'string',
 } as const
 const SHOT_ROOTS = new Set([
   ...Object.keys(FIELD_TYPES).map((key) => key.split('.')[0]),
@@ -127,9 +135,10 @@ export function presetLink(id: string): string {
 
 /** Dotted keys mirror the picture object; URLSearchParams owns text escaping. */
 export function pictureLink(picture: Picture, save = false): string {
+  const version = shotVersion(picture)
   const [portable] = decodePictures({
     format: 'inertialref/presets',
-    version: 2,
+    version: Number(version),
     pictures: [
       {
         ...picture,
@@ -137,7 +146,7 @@ export function pictureLink(picture: Picture, save = false): string {
       },
     ],
   })
-  const params = new URLSearchParams({ [QUERY.shot]: SHOT_VERSION })
+  const params = new URLSearchParams({ [QUERY.shot]: version })
   flatten(portable, params)
   if (save) params.set(QUERY.save, '1')
   if (params.toString().length > MAX_SHOT_LENGTH)
@@ -167,8 +176,8 @@ export function readPictureLink(params: URLSearchParams): {
   if (id !== null)
     return { picture: findPicture(id), save: params.get(QUERY.save) === '1' }
   if (shot === null && !hasFields) return { picture: null, save: false }
-  if (shot !== '1' && shot !== SHOT_VERSION)
-    throw new Error('Expected a shot link with shot=1 or shot=2.')
+  if (!(SHOT_VERSIONS as readonly string[]).includes(shot ?? ''))
+    throw new Error('Expected a shot link with shot=1, shot=2 or shot=3.')
   const pictures = decodePictures({
     format: 'inertialref/presets',
     version: Number(shot),

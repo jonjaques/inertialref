@@ -21,6 +21,11 @@ import { buildTextures } from './textures.ts'
 import { buildSolarReference } from './solarReference.ts'
 import { buildShapes } from './shapes.ts'
 import { buildAudio, fetchMasters, reportMasters } from './audio.ts'
+import {
+  buildIsccp,
+  fetchIsccpMonths,
+  reduceIsccpFiles,
+} from './isccpSources.ts'
 
 /*
  * The ingest.
@@ -554,9 +559,15 @@ try {
     })
   } else if (command === 'audio:report') {
     await reportMasters(root)
+  } else if (command === 'isccp:fetch') {
+    await fetchIsccpMonths(root, process.argv.includes('--print-manifest'))
+  } else if (command === 'isccp') {
+    await buildIsccp(root, import.meta.filename)
+  } else if (command === 'isccp:reduce') {
+    await reduceIsccpFiles(process.argv.slice(3))
   } else {
     console.error(
-      `unknown command "${command}"\n\n  fetch         download the catalog sources into .data/raw\n  report        build the catalog and print, without writing\n  build         build the catalog and write data/catalog\n  textures      build the planetary surface maps into data/textures\n  solar         refresh data/reference/solar-system.json from JPL\n  shapes        build the measured shape models into data/shapes\n  audio:fetch   download and verify the soundtrack masters in data/audio/masters\n  audio:build   encode the soundtrack and write data/audio\n  audio:report  measure the soundtrack masters and print\n\n  --refresh       re-download rather than using the cache\n  --spectrograms  audio:build also draws every master's spectrogram into .data/audio/review`,
+      `unknown command "${command}"\n\n  fetch         download the catalog sources into .data/raw\n  report        build the catalog and print, without writing\n  build         build the catalog and write data/catalog\n  textures      build the planetary surface maps into data/textures\n  solar         refresh data/reference/solar-system.json from JPL\n  shapes        build the measured shape models into data/shapes\n  audio:fetch   download and verify the soundtrack masters in data/audio/masters\n  audio:build   encode the soundtrack and write data/audio\n  audio:report  measure the soundtrack masters and print\n  isccp:fetch   download ISCCP-H's 120 monthly files into the main checkout's .data/weather/isccp\n  isccp         fetch, then reduce them to packages/rendering/src/isccpZonal.generated.ts\n\n  --refresh       re-download rather than using the cache\n  --spectrograms  audio:build also draws every master's spectrogram into .data/audio/review`,
     )
     process.exit(2)
   }

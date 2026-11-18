@@ -22,6 +22,8 @@ import {
 } from './pictureProcessing.ts'
 import type { TerrainReport } from './descent.ts'
 import type { GalaxyRenderReport } from './galaxy.ts'
+import type { CloudRadiance, CloudRenderReport } from './clouds.ts'
+import type { PictureWeather } from './pictures.ts'
 import type { TimingPort } from './profile.ts'
 
 /*
@@ -224,6 +226,9 @@ export interface TerrainCacheReport {
 /** `RenderHost.boot`: renderer absent, drawing under the cover, or up. */
 export type BootPhase = 'booting' | 'drawing' | 'booted'
 
+/** What became of a picture's weather: drawn, asked for and not drawn, or not asked for. */
+export type PictureWeatherOutcome = 'drawn' | 'unavailable' | 'none'
+
 /**
  * The render side of a host: what a frame can answer, and what it can be told.
  *
@@ -267,6 +272,17 @@ export interface RenderHost {
   /** The live volume, if a renderer is attached. */
   galaxyRender(): GalaxyRenderReport | null
   /**
+   * The cloud system's report: null wherever no chain built one — every host
+   * without `?clouds=1`, and every host that draws nothing.
+   */
+  clouds(): CloudRenderReport | null
+  /**
+   * The cloud system's capture of its next frame's radiance at the trace's
+   * texels, with the texels that hold cloud: null wherever no chain built a
+   * system, and on a frame that draws no clouds.
+   */
+  cloudRadiance(): Promise<CloudRadiance | null>
+  /**
    * The lens the picture is being taken with, and the pixels it lands on.
    *
    * A getter rather than a setter for the same reason `world` is: the engine
@@ -304,6 +320,21 @@ export interface RenderHost {
    * camera to fit it to and the arithmetic is worth running anyway.
    */
   setFlightLens(lens: Lens): void
+  /**
+   * Draw a picture's weather, or none, over the body at `address`.
+   *
+   * What a picture holds beyond its instant: whether the volume draws at all
+   * while its default is off, and the regime standing in for the climate.
+   * The host keeps the levers it found and puts them back when the picture
+   * is left, on the observatory's clear or on the next picture, so a
+   * picture's forced body never outlives it. `'unavailable'` is weather the
+   * host cannot draw — no `?clouds=1`, no WebGPU, or a regime this build
+   * does not know — and headlessly every weather is.
+   */
+  setWeather(
+    weather: PictureWeather | null,
+    address: string,
+  ): PictureWeatherOutcome
   /** The player's settings, independent of cinematic and instrument staging. */
   cameraProcessing(): PictureProcessing
   /** Restore processing through the same preference owner as the camera panel. */
@@ -388,10 +419,15 @@ export function renderHost(overrides: Partial<RenderHost> = {}): RenderHost {
     frameStats: overrides.frameStats ?? (() => null),
     boot: overrides.boot ?? (() => 'booted'),
     galaxyRender: overrides.galaxyRender ?? (() => null),
+    clouds: overrides.clouds ?? (() => null),
+    cloudRadiance: overrides.cloudRadiance ?? (async () => null),
     terrain: overrides.terrain ?? (() => null),
     lensView: overrides.lensView ?? (() => null),
     framingLens: overrides.framingLens ?? (() => LENS_PRESETS.flight),
     setFlightLens: overrides.setFlightLens ?? (() => {}),
+    setWeather:
+      overrides.setWeather ??
+      ((weather) => (weather === null ? 'none' : 'unavailable')),
     cameraProcessing: overrides.cameraProcessing ?? (() => processing),
     setCameraProcessing:
       overrides.setCameraProcessing ??

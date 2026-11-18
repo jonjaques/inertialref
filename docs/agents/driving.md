@@ -177,7 +177,7 @@ flags, applied before all steps, and must be repeated for a matching warm attach
 The driver always sets `presentation=occluded`.
 Add `--print-url` to print the resolved link without starting Chrome or a server.
 
-The URL uses `shot=1` plus dotted picture keys such as `time`,
+The URL uses `shot=2` plus dotted picture keys such as `time`,
 `framing.state.distance`, and `lens.zoom`. Numbers retain full precision.
 Time is seconds from J2000, camera angles are radians, and camera distances
 are meters. Lens focal length and gauge are millimeters.
@@ -185,6 +185,14 @@ are meters. Lens focal length and gauge are millimeters.
 `save=1` restores the view and opens its save prompt at `/planetarium/presets`
 without writing to the library. See the
 [preset format](../adr/0033-presets-hold-a-photographic-instant.md).
+
+A picture with weather is `shot=3` and carries `weather.regime`. The
+cornerstones (`weather-e1-cumulus-orbit` … `weather-g6-descent`) are
+`--preset` ids like the bundled shots; add `--query clouds=1` to draw their
+weather, and without it they draw Earth's deck and no volume
+([ADR-0067](../adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md)).
+`--settle` waits on the clouds as well under the flag: their caches and 32
+frames of their history.
 
 Invalid query overrides reach the page for error-path tests. Invalid JSON
 fixtures fail before Chrome starts. Run `pnpm vitest run presetUrl.test

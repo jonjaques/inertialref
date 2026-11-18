@@ -264,6 +264,26 @@ Every driving verb took an address and nothing produced one.
 
 ## Bugs the tests found (worth not reintroducing)
 
+- **A measurement stance inherited the lens the run before it left.** One
+  page served every far-shore run of a size, `ir.visit` sets no lens, and the
+  moon's rise fits the flight lens and keeps it, so every `cut`, `scrub`,
+  `fly` and `pair-neighbor` row of the weather's campaign 2 measured another
+  lens's frame. The clouds-off base gave it away, `ground` at 1080p at 5.87 ms
+  steady and 6.92 to 7.29 after the rise. Every stance now starts from its
+  preset's picture; `measure.test.mjs` runs a stance after the moon's and
+  holds its lens to far-shore's (10 Nov 2026, below).
+- **A quiet row with no figures finished its run.** A residual drawn under the
+  other processing, a radiance capture that answered null and a stance whose
+  scene never settled each came back without a throw, and a continued batch
+  and the campaign counted the run done. `unfit` names what a row lacks, and
+  only a quiet, fit row finishes (`campaign.test.mjs`).
+- **A cloud frame that threw still composited the cloud.** The frame node put
+  the renderer back and logged that the frame draws without the clouds, while
+  the composite, already shown, drew the last good frame's history under the
+  new camera. The driver's `failed()` makes it inert and resets the history;
+  `cloudSystem.gpu.test.ts` throws in the trace after twenty clouded frames
+  and reads back the clouds-off frame.
+
 - **A refused `response.create` wedged the guide for the session.** The
   in-flight flag set at the create was cleared only by `response.created`, so
   a rate limit, a redelivery race or a configuration refusal left every later
@@ -664,6 +684,73 @@ again in a neighboring system.
   open `BEGIN IMMEDIATE`, which no test timeout can interrupt, so the test for
   it runs in a child process under a deadline and the defect reports ETIMEDOUT
   rather than hanging the job.
+- **A cell with no coverage held cloud, and Earth was overcast from orbit.**
+  The density blended a cell's resolved and unresolved pictures by mixing
+  each number on its own, fraction and σ, so where coverage was 0 the mix
+  still held `(1 − f)·f·σ_k·p̄` of extinction: a quarter of the mean density
+  at a half-resolved footprint. The far atlas read 0.96 cloud at every texel
+  of a face whose coverage was 0. Blend the mean extinction, fraction × σ,
+  and take σ as the ratio (`d338623a`, 10 Nov 2026, below).
+- **The trace classed every texel as sky, in the reciprocal of the
+  composite's units.** `R·compression/1000` and `1000/(compression·R)` both
+  compile. The blocked air then took the sky's beam on every surface texel.
+  The conversions live once, in `cloudCompositeAir.ts`, and the test reads
+  the class off the blocked air's band ratio, which no quadrature moves
+  (`9f332134`).
+- **An opaque cloud wore every kilometer of air behind it.** The march exits
+  under 1% transmittance, the blocked air stopped where the march did, and
+  the composite draws `(1 − T_c)·L_a(0, t₁)` to the span's end: the horizon
+  haze laid over every opaque cumulus. After an exit, and past the handover
+  to the far march, the air to `t₁` is still blocked and has to be summed
+  (`216692f5`, `e2f7fbc7`).
+- **The history's clip held a sum and let its terms run.** It held the
+  luminance of the cloud's light plus its blocked air inside the neighbors'
+  and scaled both by one factor. Beside an opaque cell that factor has no
+  bound, and a thin texel's light grew up to 79 times: black specks under the
+  identity, white under the thin form. Each term is clipped in its own window
+  (`20696e12`).
+- **The field moved against its own wind.** The noise was read at origin plus
+  drift, which moves a feature at minus the wind, while the history
+  reprojected and the composite wrote velocity at plus it: 2·wind·Δt apart
+  every frame. Read the lattice at origin minus drift (`eda24bc1`).
+- **A scrub redrew one block, and one face, forever.** A jump restarted the
+  far atlas's cursor at block 0 and the weather cube's queue at the eye's
+  face, and under a scrub every frame is a jump, so the other 44 blocks and
+  five faces never baked. A restart owes the whole cycle without moving the
+  cursor, and the longest-stale face bakes first (`6ba3820d`, `ce6c78a4`).
+- **A narrow target warmed the wrong program.** `compileAsync` builds a
+  program after an await, by when the warm-up has put its target back, and
+  three takes a fragment's output type from the target bound when it runs:
+  `vec4` with none, `f32` for R16F, `vec2` for RG8. Every four-channel bake
+  warmed right by coincidence, and the R16F depth copy, the RG8 volume and
+  the R16F grid each built a second pipeline on their first frame. A target
+  with fewer than four channels warms by drawing (`warmByDrawing`,
+  `cf16b1af`).
+- **An overlay marked for a layer the camera did not yet test compiled
+  nothing at boot.** `compileAsync` drops an object whose layers fail the
+  camera's, silently, so a mask set in a frame callback leaves every marked
+  overlay to compile on its first drawn frame. The camera tests the layer
+  from its creation. A light on layer 0 alone is the same trap from the other
+  side: the second pass is dark and each overlay builds a second, unlit
+  pipeline (Rule 69).
+- **A storage texture regenerated a mip chain nobody asked for.** Three's
+  `StorageTexture` keeps `generateMipmaps` on: at 16 × 16 it has 5 levels,
+  and a sampled draw after a compute write takes 5 passes, four of them
+  regenerating the chain. Every storage texture the clouds hold is made by
+  one helper that turns it off.
+- **A plain `sample()` in a loop compiles on Chrome and returns anything.**
+  Three turns WGSL's derivative-uniformity check off outside Firefox. Every
+  read inside the march names its level, and the test compiles a variant
+  with one plain read to show the assertion can fail.
+- **One NaN in the history blacks out the frame, and stays.** The history
+  guards its reads and its writes: a value that is not finite takes the
+  current one, and a current one that is not takes clear sky. Without the
+  write guard both NaN cases fail.
+- **The glory's first ring was found on a hump at the antisolar point.** In
+  white light a 10 µm drop's redness climbs from the antisolar point to a
+  small maximum at 0.5° before it falls. Taking ψ = 0 as the first minimum
+  put the "first ring" there, 76% inside Laven's 24/r. The first minimum lies
+  strictly past ψ = 0 (`mie.test.ts`).
 
 ## The five spikes, measured (19 Aug 2026)
 
@@ -13376,6 +13463,426 @@ checkout itself. The skill now sends a T3 thread to `delegate_task` with
 both ports against every other worktree. `t3.json` marks the action
 `stopOnSettle`. T3 does not read actions live from `t3.json`: the change takes
 effect when the action is imported again under Settings → Projects.
+
+## The weather's frame is measured on the Mac mini, and its four choices are made (10 Nov 2026)
+
+Phase 0 of [the weather plan](design/plans/the-weather.md) built every cloud
+pass in its final place behind `?clouds=1`, drawing a placeholder field, with
+every candidate for four choices in the tree at once. Two campaigns on the Mac
+mini (Mac18,5, Apple M6, 32 GB; Chrome 157.0.8103.40; production build;
+1920×1080 and 2880×1800) measured them by rules fixed in
+[the design](design/plans/weather/phase0/design.md) §8.7 before any figure
+existed, and five commits then deleted the losers: 6,822 lines out and 1,718
+in, from `99fa5fe2` to `d03b8420`. Four records hold the result.
+[ADR-0063](docs/adr/0063-the-weather-draws-between-a-scene-pass-under-the-clouds-and-one-over-them.md)
+is the frame and the composite,
+[ADR-0064](docs/adr/0064-the-clouds-march-the-field-and-the-suns-depth-is-a-grid-summed-through-the-volume.md)
+the march, the sun's depth and the far field,
+[ADR-0065](docs/adr/0065-a-scene-unit-is-the-sun-above-the-air-and-the-sensors-white-is-half-a-stop-under-it.md)
+the scene unit and
+[ADR-0066](docs/adr/0066-the-droplets-phase-is-lorenz-mie-at-one-narrow-width-generated-offline.md)
+the droplets' phase table. The plan lost its decided sections and cites them,
+and the OVER layer is Rule 69.
+
+**What the campaigns found that the plan did not expect.** Campaign 1 ran at
+`8a01d311`, 78 A/B rows in 78 minutes, a sweep and 18 image comparisons, every
+counted row on a quiet machine.
+
+- **The bake is not the lever.** The plan called a baked local volume "likely
+  the largest lever". It is 0.8 to 1.5 ms cheaper than marching the field
+  under a clear sky and 0.3 to 1.0 ms dearer with cloud in view, and it draws a
+  broken-cloud horizon 6.3 to 6.9% from the field's against a gate of 3%. The
+  volume stays only because the sun's grid sums through it.
+- **The second scene pass is campaign 1's largest cloud cost:** 1.5 to
+  2.1 ms at 1080p and 3.9 to 5.1 at Retina, where the plan budgeted 0.3 for
+  the composite and the split together. A break of the scene pass with nothing
+  drawn in it costs 1.0 and 2.4 ms. The trace costs less at Retina than at
+  1080p, because it follows the CSS axes.
+- **A fetch is cheap and a step is not.** At constant work the base noise
+  fetches at 1.2 × 10¹¹ a second, R8 and RGBA8 alike, and a step's own
+  arithmetic costs 2.5 to 2.7 times one more fetch.
+- **Both far fields let through about half again the light of the fine
+  march** over broken cumulus (0.306 and 0.309 against 0.207), and nearly ten
+  times on a grazing ray at sunset. The atlas won by the rule, on one case of
+  four and four cloudy bins. The working hypothesis is that the far march
+  mixes cover once a 24 to 39 km texel where the fine march mixes once a cell;
+  nothing has tested it.
+- **The grid makes a reset frame 19.7 ms.** It is rebuilt whole in one frame
+  on a cut, on a scrub, and whenever the sun turns 0.05°.
+
+The clouds are over the plan's budget at both sizes. Campaign 2, at
+`bbea04da` on the landed defaults, measured the landed frame at 7.12 ms under
+cumulus on the ground and 3.03 from orbit at 1080p, against 2.9 and 1.6, and
+8.91 and 5.54 at Retina; all 86 of its rows were quiet. Its four taps move the
+trace past the second scene pass at 1080p on `ground`, `horizon`, `decks`
+and both pairs
+(3.72 ms against 1.70 on `ground`); at Retina the second pass is still the
+largest. The first frames with the clouds on are a hitch, 50.80 to 66.80 ms at
+1080p against a steady 16.7 and 75.00 to 92.50 at Retina against 25.0, the
+size of the caches' first build and not shown to be a compile. Declared memory
+is 91.62 MB at 1080p and 85.01 at Retina, over the plan's 76. The figures and
+their conditions are the ADRs', and the documents are committed under
+[`design/plans/weather/phase0/measurements/`](design/plans/weather/phase0/measurements/README.md).
+
+**The rig measured itself twice, and both are worth recognizing.**
+
+- **A campaign's CPU profiles ran at 60 frames a second and the same rows by
+  hand at 120.** Every `ir.profile` window of campaign 1 delivered 179 to 182
+  frames in 3 s with the clouds off, at both sizes. Two repeats of the
+  placement rows, started from a shell at `25df44ab`, ran the 1080p base at
+  109 to 120 frames a second. The `sensor` span followed the rate, 6.80 ms
+  against 3.05 on one base, and `ir.gpu`'s Δ did not, 0.1 ms across both. The
+  cause was not found: a dark display and a detached launch under `caffeinate`
+  each present at 115 to 119 Hz when tried alone. What is known is the other
+  direction. `caffeinate -u` wakes the display, an unattended mini's session
+  is locked, and a lit lock screen over the rig's window presented at 51, 54
+  and 68 Hz, unevenly. So a campaign leaves a dark display dark, every row
+  records `presentHz`, and a frame-paced figure is compared only at one rate.
+- **`ground` stood in a clear cell.** Fair cumulus on far-shore is a hash of
+  cells about 80 km across, and the basin stands in a clear one: cloud in
+  2.0% of the trace's texels, a clear sky in the still, at every heading
+  (1.1 to 4.2% round twelve). The stance moved one degree north along the
+  line of equal sun, to 38.8% cloud at the same 37.5°. A scenario named for
+  its weather is not evidence the frame holds any: read the cloud mask before
+  a batch stands on a stance.
+- **The Stop-hook gate's marker belongs to the project directory, not to a
+  session.** Any session's Stop claims a marker another left and runs the
+  gate, which is a `pnpm` and a `vitest` beside a measurement. During a
+  campaign nothing in the worktree may touch a `.ts`, `.mjs` or `.json` file,
+  the scratch directory included.
+
+**Tried and rejected.** The alternatives the ADRs name are there. These are
+the smaller ones, from
+[the packages' reports](design/plans/weather/phase0/package-reports.md):
+
+- **A fixed in-cloud step** takes thousands of steps through a grazing cirrus.
+  The step is 0.3 of an optical depth with a floor that grows with distance.
+- **Reading the weather cube every step** does not fit the trace's 16 sampled
+  textures beside the clipmap, so the clipmap is baked from the cube and the
+  march reads the clipmap alone.
+- **`tanh` for the depth moments' share.** On the Metal device `tanh` is
+  `(e^2y − 1)/(e^2y + 1)`, and past an argument of about 44 that is inf over
+  inf: a cloud a kilometer in front of a surface gave a NaN share at every
+  pixel. The share is the logistic the same expression equals, its exponent
+  held to ±80.
+- **One filtered read of a pair of half floats.** The cascades stored their
+  front depth as a value and a residual so a linear filter could sum them; on
+  this hardware the filtered pair does not sum, and the read became four
+  `textureLoad`s. The cascades are gone, and the lesson is the pair's.
+- **Lighting a far column through half its own depth,** `e^(−τ/2μ)`. It is
+  right to second order while a column is thin and nothing once it is not: a
+  cumulus column of τ 30 to 90 passed 10⁻¹⁰ to 10⁻³⁰ of the sun, and every
+  cumulus cell seen from orbit was a hole.
+- **The sweep, the RGBA8 noise and the curl texture** went with the losers
+  once the sweep had been read. The curl itself is folded into the base noise
+  at the bake.
+
+**Not measured.** `lightTaps` 4 has no larger rung beside it, so its rule
+leaves it unset and 4 ships. `farFootprint` 800 was read on the ground and
+inside a cloud and on no orbit stance, and no comparison of the two far
+candidates exists at 800 m: campaign 1 scored 400 and 1,600, and the atlas
+alone was scored at 800 after the spheres went. `force: 'reset'`, the
+immediate regime alone, has no row, and no warp row was recorded. Every figure
+is the M6 mini's; the plan's M5 basis is unmeasured.
+
+**The placement is an exception to its rule, not a pass.** §8.7's CPU clause,
+as fixed, fires at Retina inside a cloud, where A's `sensor` mean is 1.51,
+3.51 and 4.64 ms over B's in the three samples, and on `horizon` at 1080p in
+campaign 1's sample, 18 late frames against none. The reading that cleared
+both added a condition §8.7 does not state, twice the larger sample standard
+deviation, and was fixed after campaign 1's result was in hand; it cleared the
+Retina cell by 0.06 ms on samples pooled across two presentation rates, and
+on the paired differences' own deviation it does not clear. ADR-0063 keeps A
+as the exception §8.7 allows with figures, provisional on the CPU evidence,
+and both placements exist at `25df44ab` for phase 1's retake of that cell at
+one rate. A rule's reading is fixed before the result it reads. The fine march takes a step's source at
+the step's start, so every radiance in the far comparison is against a
+reference biased high. And the placeholder's density and light mean nothing:
+no image from phase 0 says how a cloud looks.
+
+## The weather's forced rows looked through the moon's lens, and the placement is an exception (10 Nov 2026)
+
+Three council seats reviewed phase 0 of the weather at `51c96da4` and scored
+it 7 of 10 each. What they found that the records did not say, and what came
+of it.
+
+**Campaign 2's forced rows measured another lens's frame.** The runner serves
+every far-shore run of a size from one page, and `pair-moon`, sixth of the
+steady rows, stands by a picture with a rise framing, which fits the flight
+lens and keeps it. `ir.visit` sets none, so every `cut`, `scrub` and `fly` row
+and both `pair-neighbor` rows after it stood where specified and looked
+through the moon's lens. The base said so and nobody read it: `ground` at
+1080p 5.87 ms steady, 6.92, 7.29 and 7.21 forced; `decks` at Retina 6.97
+against 11.24. The four scenarios campaign 2's summary named as two operating
+points were these rows, not a moving rate. Every stance now starts from its
+preset's picture, and the 40 rows were taken again at `f9746fd3` with the
+display dark, `pair-moon` first at each size as the control: `pair-neighbor`
+right after it reads a base of 5.88 ms. The costs barely moved. The reset
+frame on `horizon` is 20.30 ms at 1080p and 22.14 at Retina, where campaign 2
+read 20.61 and 21.78; `pair-neighbor` steady 7.18 and 8.84 against 6.96 and
+8.30; the grid's share of a cut 9.11 to 16.82 ms against 10.48 to 16.52. A
+base that differs from the same stance's steady base is a stance that is not
+the one specified; compare them before reading a forced row.
+
+**The placement's CPU clause fires as fixed.** The reading that cleared it
+added a condition §8.7 does not state and was chosen after the result it
+read; the build log's entry above says so, and ADR-0063 now keeps A as an
+argued exception, provisional on the CPU evidence.
+
+**The landed set has a ladder.** The `choices` campaign at `51c96da4` took
+the three ladders on the grid with 4 taps at 800 m. `maxSteps` 192 holds
+(0.02% and 0.01% against 256); `farFootprint` 800 is set by Retina, 7.23%
+from 400, with 200 passing at 1080p; `lightTaps` 2 against 4 is 1.03% and
+1.13%, and 4 has no rung above it, so the rule leaves it unset and 4 ships.
+The far comparison now scores the atlas at 800 m, alone: the spheres were
+gone before it could.
+
+**Two runner defects, one composite defect.** A row refused, empty or taken
+on an unsettled scene finished its run; it no longer does, and over every
+document on the mini the new check rejects no quoted figure and four rows on
+a scene still building, one of them campaign 1's B row on `orbit` at 1080p,
+in no cell the placement's rule fired in. And a cloud frame that threw
+composited stale cloud; the composite is now inert on such a frame.
+
+**Declared, not fixed: what phase 1 inherits.** Under the game's own warp at
+60 Hz every frame from 100× up is a jump and rebuilds the grid whole; the
+knots mean the first four clipmap columns on the real field; the drift is
+built in the eye's tangent basis, so the field depends on the eye; the far
+atlas filters log τ against clear texels' zero; the motion reset has no floor
+near a layer's boundary; the grid's window ends in a hard edge; the step-start
+bias reaches +52% at 8 km and more at the far handover; and the three accuracy
+instruments assert only finiteness. Every figure is the M6 mini's, and the
+plan's M5 basis is unmeasured. The weather README lists each.
+
+## Takram's clouds draw in our scene unmodified, and three of their presets do not compile on a first frame (14 Nov 2026)
+
+A spike, on `spike/takram-clouds`, to answer one question: whether takram's
+volumetric clouds can draw here through the unofficial WebGPU port as it ships,
+or need a fork. They draw. `three-clouds-webgpu` 0.1.0-alpha.6 runs on three
+0.185.1 with no change to it, behind `?clouds=takram`, in the slot ADR-0063
+gives the native composite: the port's resolved layer is the first opaque of
+the scene pass over the clouds, against our depth, so the planet, the ground
+and the sea are ours and an object marked over the clouds still draws over
+them. alpha.8 on three 0.187 was not tried. No ADR records this: the choice
+between the two renderers is not made.
+
+**The adapter is four modules and no shader.** The port draws over a WGS84
+ellipsoid in ECEF and takes the scene through one matrix. `takramFrame.ts`
+stands a point of the body's datum on Earth's equator and keeps the eye's true
+height, heading and sun; `takramDepth.ts` copies the scene's 4× MSAA depth to
+one sample, because the port samples depth by uv; `takramClouds.ts` builds the
+pass and takram's atmosphere; `takramTunables.ts` is the port's 174 tunables
+and five presets as a table, written through `engine.takram`. The port's
+luminance is scaled by arithmetic: an albedo-one surface under its sun is its
+illuminance over π, which is one scene unit (ADR-0065).
+
+**What it costs.** The whole frame with the clouds on less the same page with
+them off, on G1, on the Mac mini (M6), production build `28903d80`, one fresh
+page a row, `ir.gpu(135)` taken three times and the least kept, three pairs
+and their median, thermal pressure 0 throughout. The frame without clouds is
+5.2 ms at 1920 × 1080 and 11.9 ms at 2880 × 1800.
+
+| Row                               | 1920 × 1080 | 2880 × 1800 |
+| --------------------------------- | ----------- | ----------- |
+| The native renderer               | 7.87 ms     | 8.86 ms     |
+| Takram `lowEnd`                   | 2.49        | 5.63        |
+| Takram `low`                      | 4.50        | 7.10        |
+| Takram `medium`                   | 10.22       | 16.39       |
+| Takram `high`                     | 19.82       | 26.60       |
+| Takram `ultra`                    | 54.89       | 70.12       |
+| `high`, no layer casting a shadow | 8.82        | 15.72       |
+| `high`, `shadow.maxFar` 200 km    | 9.10        | 16.61       |
+| `high`, `lightShafts` off         | 19.46       | not taken   |
+| `high`, `temporalUpscale` off     | 55.11       | not taken   |
+
+The native row agrees with the weather's own `ground` row, 7.82 ms. Takram
+marches a quarter of the buffer on each axis and resolves at the whole of it,
+720 × 450 into 2880 × 1800, where the native trace is 360 × 225 into 720 × 450.
+`ultra` reads 60.1 ms right after the clouds go off and on and 64.1 ms held
+on; the table's is the first.
+
+**The port fits its shadow maps to the camera's far plane, and ours is
+10¹⁰ m.** `shadow.maxFar` is null in every preset, which means the far plane
+times `farScale`. Fitted to that, the cascades' texels span thousands of
+kilometers: the clouds barely shadow themselves, and the pass is more than
+half of `high`. At `shadow.maxFar` 200,000 the bases darken and the frame
+costs 9.10 ms in place of 19.82.
+
+**Five things that must not come back.**
+
+- **The port's composite samples at the mesh's own uv, and is written for
+  three's `QuadMesh`,** whose v is 0 at the top of the screen. A
+  `PlaneGeometry`'s is 1 there, and the first frame drew the sky's clouds on
+  the ground.
+- **`low`, `medium` and `lowEnd` do not compile on a first frame.** They turn
+  `accurateSunSkyLight` off, and on three 0.185 that graph fails with
+  `Member "bottomRadius" not found in struct "AtmosphereParameters"`, at boot
+  and on the first frame after the clouds were off alike. Rebuilt on the
+  frame after one the port drew, it compiles. Nothing fails in the picture:
+  the march's pipeline is refused and the frame costs less than the preset's.
+  `high` read 15.66 ms after two refused presets in one page, where a fresh
+  page reads 19.82. The first cost table was taken in that state
+  and is void. A setting is now written only after a frame the port drew, and
+  a cost row is refused when the console holds a `THREE.TSL` error. The cause
+  is not found.
+- **A setting changed after a run of back-to-back `ir.gpu` frames can leave
+  the port's shadow program stale.** With no layer casting, the shadow pass
+  cost 4.6 ms a frame after such a run and 0.3 ms on a fresh page. Each cost
+  row is its own page, with its settings applied before any read.
+- **A lazy chunk that shares a module with the page re-partitions it.** The
+  takram chunk imported `cloudsServed`, the bundler split the procedural hash
+  out beside it, and `index.html` loaded 59 chunks where
+  `check-site-chunks.mjs` says 58. `App` hands the function in.
+- **pnpm refuses a tarball URL below the direct dependencies**
+  (`ERR_PNPM_EXOTIC_SUBDEP`). The geospatial fork build is the atmosphere's
+  dependency, so it is vendored as a file, one of the policy's trusted
+  sources, with its MIT text beside it.
+
+**What the port does not do here.** From 400 km it draws almost nothing: its
+march ends at `maxRayDistance`, 200 km, so the native far atlas stays for
+orbit. Its weather is a 512² map tiled a hundred times round the globe, and
+at G1's place its texels show as square-footprint cells 400 to 800 m across.
+The light on a cloud and the haze in front of it are takram's Earth's, so the
+far clouds meet our horizon in another color. No cloud shadows the ground or
+the sea, though `cloudShadowAt` answers the sun's transmittance at any point.
+A cloud writes no motion vector. The port has no compile-ahead, and with
+`high` drawing during boot the cover lifts 34 s after the page attaches at
+1920 × 1080, and not within 90 s at `ultra`. Under a slow turn its temporal
+upscale shows grain.
+
+## The cloud renderer is takram's, its adapter is `clouds*.ts`, and a cost is read after the page's own loop has turned (16 Nov 2026)
+
+The spike of 14 Nov merged into `the-weather` (#212), and the renderer it
+proved is the one the game goes forward with:
+[the clouds](design/plans/the-clouds.md) is its plan, and
+[the weather](design/plans/the-weather.md) no longer designs a march. No ADR
+records it yet; the plan's phase C writes it, when `?clouds=1` builds this
+renderer.
+
+**The adapter carries no upstream's name.** The 14 Nov entry's
+`takramClouds.ts`, `takramFrame.ts`, `takramDepth.ts` and `takramTunables.ts`
+are `clouds.ts`, `cloudsFrame.ts`, `cloudsDepth.ts` and `cloudsTunables.ts`,
+and `engine.takram` is `engine.cloudTunables`. The stem is plural because the
+native march's `cloudFrame.ts` and `cloudDepth.ts` still stand beside them.
+`?clouds=takram` is still the selector.
+
+**A review of the spike found fifteen defects, and three of them must not come
+back.**
+
+- **What the page holds for "the" cloud context is held for each context.** A
+  picture change builds the next chain beside the one still drawing. The
+  settings store followed the newest context while the old chain's frames
+  flushed into it, so a context that had drawn nothing was written `low`
+  because another chain drew: the first-frame compile failure the store exists
+  to prevent. Each followed context carries what it is owed.
+- **A write is what changed.** The port's setters clear its history and
+  rebuild its graph on a change of value. Writing the preset beside every
+  tunable turned a held `temporalUpscale: false` on and off, two rebuilds for
+  one uniform.
+- **A write the port refuses is refused where the caller is.** Thrown from the
+  flush it took the frame, and every later frame that owed a write.
+
+**What the fixes measured,** on the Mac mini's production build of `a0c731d0`,
+G1 at 1920 × 1080, one page:
+
+| State                                           | Whole frame |
+| ----------------------------------------------- | ----------- |
+| `high`                                          | 25.01 ms    |
+| `preset('low')`, sixty page frames, read        | 12.36       |
+| `preset('high')` again, sixty page frames, read | 24.93       |
+| `preset('high')` again, read with no page frame | 21.94       |
+| Both layers' `shadow` off after boot            | 24.98       |
+| `shadow.maxFar` 200 km                          | 14.82       |
+| A fresh page at `?clouds=takram:low`            | 9.61        |
+
+- **A figure is read after the page's own loop has turned.** Read straight
+  after back-to-back `ir.gpu` frames, the march is rebuilt and the shadow
+  atlas keeps the last preset's 256² until three's own frame turns. The
+  composite node now updates once a render call, as the pass does, and that
+  is half the cure. This is the "stale shadow program" of 14 Nov, bounded: it
+  does not happen in play, where every frame is three's.
+- **A layer's `shadow` flag is a uniform.** Set false after boot it costs
+  nothing less, where a page that set it before its first read costs 14.0 ms:
+  the mask changes at once and the atlas's cost follows only the next graph
+  rebuild.
+- **`low` reached from `high` is not `low` from boot,** 12.36 ms against
+  9.61. Not explained. The settings panel is not shipped until a preset costs
+  the same by any path.
+
+**Four findings stand.** `jitterFrame` pins the port's interleave with its
+jitter, because the port has one counter for both. `context.time` wraps at a
+day. The sky table still bakes under this renderer with no reader. The
+served-body rule, the sun and the blend stay copied in the adapter, which is
+what keeps the page at 58 chunks.
+
+**What else changed hands.** [The frame](design/plans/the-frame.md) sorts
+Ben Houston's posts on three.js's WebGPU renderer by where each lands here.
+Two of its findings are about this tree as it stands: a hull has no
+environment to reflect, only the star, an ambient term and a fill light; and
+three 0.185.1's bump node normalizes its position derivatives, so `bumpMap`
+changes relief with camera distance and is not to be used before the fix.
+The port's releases from alpha.7 require three 0.187.
+
+## A second face loses the warm target during a canvas rebuild (17 Nov 2026)
+
+The output-range and volumetric clouds switches rebuild the renderer. The
+replacement can start warming the landing effects before the sensor installs
+its cloud providers. Three r185 queues two draws for each two-sided transparent
+mesh. The second runs after a yield, with the warm target restored and a
+different shader cache key because the providers changed. The entry sheath and
+pad dust each produced one fragment output for a pipeline with three color
+attachments. Dawn refused both at attachment 1 and the validation handler
+retired the replacement device.
+
+The texture exception came after that retirement. On the output switch the
+trace caught a surface map and an air lookup table initialized twice against the
+same backend. With G1 held, the uncaught exception came from the port's pending
+transmittance compute. Three's renderer disposal clears the texture manager's
+records while the backend still marks the textures initialized. A change to the
+page's baked cloud texture cache only changes which inputs a new chain binds.
+
+The scene warm-up asks three to queue each two-sided transparent item once
+during its synchronous compile walk. The live scene still draws both faces.
+The physical GPU regression changes the context midway through one mesh's
+compile and records the same missing-output rejection with the two-draw walk.
+
+A quick off–on–off–on run also reached the port's pending transmittance
+compute with both its context and its renderer disposed, even with the two
+pipelines fixed. The port defers texture disposal until its idle slices finish.
+The adapter ends the iterator before its next dispatch when the chain retires,
+so the port's cleanup still runs. The GPU regression counts four compute
+pipelines after disposal with the original iterator and zero with cancellation.
+
+**The single pass is a clouds page's, and the page says so before its
+renderer exists.** A page without clouds warms as `main` does, both faces
+queued. The canvas factory sets the flag as it is invoked
+(`render/cloudBuild.ts`). A mark set once the cloud load landed came too
+late: the preload is keyed on the renderer's output, which `onReady`
+publishes inside the factory, so on a cold cache it warmed the ring and the
+sheath on an unmarked renderer while the textures were still arriving.
+
+**In dev, the first cloud load of a session reloads the page.** Vite finds
+`three-clouds-webgpu` and `@takram/three-atmosphere/webgpu` at the first
+`import()`, re-optimizes, and reloads, so a picture taken with `ir.preset`
+and no URL comes back as the planetarium's default, Earth, where the clouds
+serve nothing. That was the view that "came back on Earth" after a toggle.
+The production build pre-bundles both: on `pnpm preview`, a cold first
+toggle keeps G1 and draws its clouds.
+
+**No warm-up here reaches a two-sided transparent mesh's two faces.** After a
+warm compile, the chain's first frame builds both face pipelines and its quad,
+three in all, with the single-pass warm-up, with the both-faces queue `main`
+has, and with a compile call per face. The fix loses nothing `main` had;
+`sensor.gpu.test.ts` holds the count at three so it cannot grow unseen.
+
+**What the setting leaves alone, measured on the Mac mini at 1600 × 900.**
+With the setting off and no `?clouds=`, `pnpm presets:compare --all --base
+origin/main` moves 0 px on all thirteen presets at `76e0537d`, the peak
+per-pixel difference 3 of 255. With the clouds on, Mars's air checks draw the
+air the page draws with them off: the limb from 400 km is 0 px apart; on the
+ground at dusk the clouds-on frame is 0.67% RMSE from a clouds-off boot, where
+two clouds-off boots are 6.7% apart, the auto exposure settling at a different
+level on one of them.
 
 ## Known gaps
 

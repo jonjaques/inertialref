@@ -22,6 +22,7 @@ pnpm test:slow        # terrain descent and galaxy convergence/population checks
 pnpm typecheck        # the six type projects, in parallel — a group of pnpm check
 pnpm lint             # oxlint, not eslint
 pnpm graph            # dependency layering and cycle check
+pnpm chunks           # App's static chunks hold none of the cloud system; the build checks every page
 pnpm brand            # regenerate brand artifacts from design/brand/brandmark.svg
 pnpm presets:plates   # recapture the built-in preset thumbnails through the renderer
 pnpm presets:check    # every picture has a plate, every composition it names resolves
@@ -31,7 +32,7 @@ pnpm docs:build       # render docs/ and packages/* into the documentation site
 pnpm build            # optional media pull, docs, typecheck, then Astro build
 pnpm check            # every stage as one graph: graph, spelling, brand, presets, format, lint,
                       # typecheck, test, test:slow, sim, build. --list prints them, --force ignores the stamps
-pnpm check --only gate  # what the Stop hook runs: graph, knip, fta, lint, typecheck, test
+pnpm check --only gate  # what the Stop hook runs: graph, chunks, knip, fta, lint, typecheck, test
 
 # Reports describe the tree; each :check also gates it.
 pnpm fta              # complexity per file; fta:check exits 1 above a score of 91, in the gate

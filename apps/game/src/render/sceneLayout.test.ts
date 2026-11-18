@@ -21,10 +21,11 @@ import {
  *
  * The constraint the first property holds is Dawn's: a blend whose factors
  * read the source's alpha needs the fragment output to carry one, and three
- * emits as many components as the attachment's format has. Mirroring
- * `motion`'s blend onto the two-channel `velocity` row is the fix the upscaler
- * plan names and the one Dawn refuses — "reading alpha but it is missing from
- * fragment output" — so the table refuses it here, in Node, first.
+ * emits as many components as the attachment's format has — "reading alpha
+ * but it is missing from fragment output" — so the table refuses it here, in
+ * Node, first. It is why an overlay-masked motion row is four half floats, and
+ * why reconstruction reads that row rather than a two-channel one of its own
+ * (ADR-0044).
  */
 
 const picture = fc.record({
@@ -68,8 +69,13 @@ describe('the scene layout', () => {
         expect(layout.picture).toEqual(resolved)
         expect(layout.samples).toBe(pictureSamples(resolved))
         const temporal = resolved.aa === 'temporal'
-        expect(attachment(layout, 'velocity') !== null).toBe(temporal)
+        // Reconstruction's one row of its own. Its motion is the optics'
+        // masked `motion`: a row beside it with no blend takes an overlay's
+        // vectors over its whole footprint and hands them to FSR.
         expect(attachment(layout, 'reactive') !== null).toBe(temporal)
+        expect(layout.attachments.map((row) => row.name)).not.toContain(
+          'velocity',
+        )
         // The optics' rows are in every layout production builds.
         expect(attachment(layout, 'motion')).not.toBeNull()
         expect(attachment(layout, 'meterMask')).not.toBeNull()

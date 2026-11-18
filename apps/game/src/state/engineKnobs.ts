@@ -5,6 +5,7 @@ import {
   CAMERA_LENS,
   type Preference,
   read,
+  RENDER_CLOUDS,
   RENDER_PICTURE,
   RENDER_GAMMA,
   RENDER_LENS_FLARE,
@@ -47,6 +48,8 @@ export interface EngineKnobs {
   lensFlare: boolean
   gamma: number
   surfaceQuality: SurfaceQuality
+  /** Whether the clouds draw unasked: the setting, on a page no link built them for. */
+  cloudsByDefault: boolean
   supersample: number
   picture: Picture
   onLensRequest: ((lens: Lens) => void) | null
@@ -94,6 +97,7 @@ const KNOBS: readonly ((engine: EngineKnobs) => () => void)[] = [
 export function bindEngineKnobs(
   engine: EngineKnobs,
   pictureOverride: Picture | null = null,
+  cloudsLinked = false,
 ): () => void {
   const releases = KNOBS.map((bind) => bind(engine))
   releases.push(
@@ -102,6 +106,17 @@ export function bindEngineKnobs(
       bound.supersample = pictureDprFactor(bound.picture)
     })(engine),
   )
+  /*
+   * A page a `?clouds=` link built is a script's: its levers are what the
+   * script sets, and a capture or a cost row must not inherit the person's
+   * setting from storage. Everywhere else the setting is the default.
+   */
+  if (!cloudsLinked)
+    releases.push(
+      knob(RENDER_CLOUDS, (bound, on) => {
+        bound.cloudsByDefault = on
+      })(engine),
+    )
   /*
    * The lens sink declines what the owner would refuse, at the owner's
    * boundary. The field's guard (`isUsableLens`) is wider than the

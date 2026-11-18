@@ -28,3 +28,22 @@ allowBuilds:
   # builds nothing, and the bundle never loads core-js: posthog-js ships one
   # self-contained module. Undecided, pnpm fails the install on it.
   core-js: false
+
+# The takram spike (`?clouds=takram`). `three-clouds-webgpu` 0.1.0-alpha.6 is
+# an unofficial WebGPU port of @takram/three-clouds that ships as a GitHub
+# release archive, not on npm. On three 0.185 the npm builds of the two takram
+# packages fail at import (they read `struct().layout`, which r185 removed), so
+# the port names its own fork builds, release 7, and refuses to load on any
+# other. One copy of each has to resolve, because the port's context providers
+# and the atmosphere's nodes compare constructors: hence overrides, not two
+# dependencies. SHA-256, from the releases' own notes and checked on download:
+#   three-clouds-webgpu-0.1.0-alpha.6.tgz        469de07dcb830ec856cb63b524d44f4c08790109fb862dd82e172640e9e8f8fa
+#   takram-three-atmosphere-0.19.1+fork.7.tgz    3e77db75b7410589b076db6f74caeac5f3a2f787cef5cb7b363285c5ee85f9e0
+#   takram-three-geospatial-0.9.1+fork.7.tgz     319ea47db67a9372e6dce58317cc702b6fd105e051964ed4c8e474bf072d9e44
+overrides:
+  '@takram/three-atmosphere': https://github.com/johnfewell/three-geospatial/releases/download/fork-release-7/takram-three-atmosphere-0.19.1%2Bfork.7.tgz
+  # A file, not the release's URL: geospatial is the atmosphere's own
+  # dependency, and pnpm's `blockExoticSubdeps` refuses a tarball URL below the
+  # direct dependencies (ERR_PNPM_EXOTIC_SUBDEP). A local file is one of its
+  # trusted sources, and the port's own install vendors it for the same reason.
+  '@takram/three-geospatial': file:./vendor/takram-three-geospatial-0.9.1+fork.7.tgz

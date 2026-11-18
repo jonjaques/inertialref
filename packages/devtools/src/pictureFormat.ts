@@ -27,6 +27,24 @@ const angle = (value: unknown): boolean => number(value, -1e9, 1e9)
 const pitch = (value: unknown): boolean =>
   number(value, -ELEVATION_LIMIT, ELEVATION_LIMIT)
 
+/**
+ * A regime is a name, checked for its shape and never against this build's
+ * table: the table grows, and a picture naming a regime some other build
+ * knows has to decode here and report its weather unavailable, not refuse
+ * the file it came in. `weather` holds `regime` and nothing else, because
+ * `isPicture` passes unknown top-level keys and a field inside this one would
+ * otherwise ride through unread.
+ */
+function isPictureWeather(value: unknown): boolean {
+  return (
+    record(value) &&
+    Object.keys(value).length === 1 &&
+    typeof value.regime === 'string' &&
+    value.regime.length <= 64 &&
+    /^[a-z][a-z0-9-]*$/.test(value.regime)
+  )
+}
+
 export function isPicture(value: unknown): value is Picture {
   if (
     !record(value) ||
@@ -57,6 +75,8 @@ export function isPicture(value: unknown): value is Picture {
   if (value.fovDeg !== undefined && !number(value.fovDeg, 0.1, 150))
     return false
   if (value.processing !== undefined && !isPictureProcessing(value.processing))
+    return false
+  if (value.weather !== undefined && !isPictureWeather(value.weather))
     return false
   if (value.lens !== undefined) {
     const lens = value.lens
@@ -145,17 +165,24 @@ export function isPicture(value: unknown): value is Picture {
   }
 }
 
-/** Validate the whole file before a host changes its library or camera. */
+/**
+ * Validate the whole file before a host changes its library or camera.
+ *
+ * Three versions: 1 restores the Enhanced defaults and carries no
+ * processing; 2 requires processing; 3 is 2 with an optional `weather`. A
+ * version older than 3 carrying weather is refused rather than read, since
+ * nothing that wrote one could have meant it.
+ */
 export function decodePictures(data: unknown): readonly Picture[] {
   if (
     !record(data) ||
     data.format !== 'inertialref/presets' ||
-    (data.version !== 1 && data.version !== 2) ||
+    (data.version !== 1 && data.version !== 2 && data.version !== 3) ||
     !Array.isArray(data.pictures) ||
     data.pictures.length > MAX_FILE_PICTURES
   )
     throw new Error(
-      'Expected an InertialRef presets file, version 1 or 2 (up to 1,000 shots).',
+      'Expected an InertialRef presets file, version 1, 2 or 3 (up to 1,000 shots).',
     )
   const ids = new Set<string>()
   for (const [index, picture] of data.pictures.entries()) {
@@ -163,7 +190,8 @@ export function decodePictures(data: unknown): readonly Picture[] {
       !isPicture(picture) ||
       (data.version === 1
         ? picture.processing !== undefined
-        : picture.processing === undefined)
+        : picture.processing === undefined) ||
+      (data.version !== 3 && picture.weather !== undefined)
     )
       throw new Error(`Invalid preset at position ${index + 1}.`)
     if (ids.has(picture.id))
@@ -178,10 +206,14 @@ export function decodePictures(data: unknown): readonly Picture[] {
   }))
 }
 
+/**
+ * Version 3 only when a picture carries weather, so an export with none
+ * stays readable by a build that knows only 1 and 2.
+ */
 export function encodePictures(pictures: readonly Picture[]): string {
   const envelope = {
     format: 'inertialref/presets',
-    version: 2,
+    version: pictures.some((picture) => picture.weather !== undefined) ? 3 : 2,
     pictures: pictures.map((picture) => ({
       ...picture,
       processing: picture.processing ?? DEFAULT_PICTURE_PROCESSING,

@@ -6,7 +6,8 @@
   "description": "Canonical-to-render coordinate bridge, floating origin and LOD.",
   "sideEffects": false,
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./slabSourceTexels": "./src/slabSourceTexels.generated.ts"
   },
   "inertialref": {
     "layer": 5

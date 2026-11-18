@@ -1,16 +1,23 @@
-import { afterAll, beforeAll, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { SURFACE_LUMINANCE, type ThrusterLayout } from '@inertialref/rendering'
 import {
   type BufferGeometry,
+  DataTexture,
+  DataUtils,
+  HalfFloatType,
   Mesh,
   MeshBasicNodeMaterial,
   NodeUpdateType,
   OrthographicCamera,
   PerspectiveCamera,
   PlaneGeometry,
+  RGBAFormat,
   Scene,
 } from 'three/webgpu'
 import { pass, vec3 } from 'three/tsl'
+import { KNOT_PADDING } from './cloudKnots.ts'
+import { createCloudFrontHandle } from './cloudSystem.ts'
+import type { CloudTraceTextures } from './cloudTrace.ts'
 import { openGpu, type GpuSession, type Pixels } from './gpuHarness.ts'
 import { createThrusterPlumes } from './plumes.ts'
 import { setSceneExposure } from './radiance.ts'
@@ -156,3 +163,121 @@ it.each(['rcs', 'pod'] as const)(
     }
   },
 )
+
+/** A one-texel trace: one slab's knot, the other three padding (design §4.9). */
+function slab(
+  [entry, exit]: readonly [number, number],
+  through: number,
+  light: number,
+): CloudTraceTextures {
+  const half = (values: readonly number[]) =>
+    new Uint16Array(values.map((v) => DataUtils.toHalfFloat(v)))
+  const pad = KNOT_PADDING.depth
+  const depth = new DataTexture(
+    half([entry, exit, pad, pad, pad, pad, pad, pad]),
+    2,
+    1,
+    RGBAFormat,
+    HalfFloatType,
+  )
+  // Knot k at (k & 1, k >> 1): the slab's first, padding after.
+  const knots = new DataTexture(
+    half([
+      ...[light, light, light, through],
+      ...[0, 0, 0, 1],
+      ...[0, 0, 0, 1],
+      ...[0, 0, 0, 1],
+    ]),
+    2,
+    2,
+    RGBAFormat,
+    HalfFloatType,
+  )
+  depth.needsUpdate = true
+  knots.needsUpdate = true
+  return {
+    light: depth,
+    aux: depth,
+    knotDepth: depth,
+    knotLight: knots,
+    extent: { width: 1, height: 1 },
+  } as unknown as CloudTraceTextures
+}
+
+describe('a plume seen through the clouds in front of it', () => {
+  /*
+   * The drive, burning toward the camera over black: its sheath and its
+   * disk, both additive, so each pixel is the plume's own light times the
+   * transmittance in front of it and the cloud's light is the frame's, not
+   * the plume's. Built before the handle follows anything, as the page
+   * builds it, and sampled at one instant, so the noise is the same frame
+   * for every draw.
+   */
+  const THROUGH = 0.3
+  /** The knots are half floats: 0.3 is 2⁻¹³ off in one. */
+  const WITHIN = 1e-3
+  /*
+   * Clear air is T = 1 exactly, but the program reading the handle is not
+   * the bare one, and the shader compiler contracts its multiply-adds as it
+   * likes: one float32 step apart at 0.80, measured on a
+   * Mac mini (Mac18,5, Apple M6). Four steps is the bound.
+   */
+  const SAME = 4 * 2 ** -23
+
+  it('is dimmed by a slab in front of it, and untouched by one behind it', async () => {
+    const camera = new PerspectiveCamera(65, 1, 0.01, 100)
+    camera.position.z = 3
+    camera.updateMatrixWorld()
+    const mouth = { position: { x: 0, y: 0, z: 1 }, radius: 0.12 }
+    const layout: ThrusterLayout = { nozzles: [], drive: mouth }
+    const handle = createCloudFrontHandle()
+    const drawFor = async (front?: typeof handle) => {
+      const plumes = createThrusterPlumes(layout, front)
+      plumes.sample(1, 2.5)
+      const scene = new Scene()
+      scene.add(plumes.group)
+      scene.updateMatrixWorld(true)
+      try {
+        return await gpu.draw(scene, camera, { float: true })
+      } finally {
+        plumes.dispose()
+      }
+    }
+    const bare = await drawFor()
+    const plumes = createThrusterPlumes(layout, handle)
+    plumes.sample(1, 2.5)
+    const scene = new Scene()
+    scene.add(plumes.group)
+    scene.updateMatrixWorld(true)
+    const draw = () => gpu.draw(scene, camera, { float: true })
+    try {
+      // Every fragment is 0.9 to 2.1 m from the lens.
+      const clear = await draw()
+      handle.follow(() => slab([0.0001, 0.0005], THROUGH, 0.2))
+      const inFront = await draw()
+      handle.follow(() => slab([0.01, 0.02], THROUGH, 0.2))
+      const behind = await draw()
+      let lit = 0
+      for (let y = 0; y < bare.height; y += 1)
+        for (let x = 0; x < bare.width; x += 1)
+          for (let c = 0; c < 3; c += 1) {
+            const own = bare.at(x, y)[c]!
+            if (own > 0.01) lit += 1
+            expect(Math.abs(clear.at(x, y)[c]! - own)).toBeLessThanOrEqual(
+              SAME * own,
+            )
+            expect(Math.abs(behind.at(x, y)[c]! - own)).toBeLessThanOrEqual(
+              SAME * own,
+            )
+            expect(
+              Math.abs(inFront.at(x, y)[c]! - own * THROUGH),
+              `(${x}, ${y}) channel ${c}`,
+            ).toBeLessThanOrEqual(WITHIN * own + 1e-6)
+          }
+      // A plume that drew nothing would pass every comparison above.
+      expect(lit).toBeGreaterThan(100)
+    } finally {
+      plumes.dispose()
+    }
+  })
+})

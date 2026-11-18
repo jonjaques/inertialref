@@ -2,11 +2,19 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   BufferAttribute,
   BufferGeometry,
+  DataTexture,
+  DataUtils,
+  HalfFloatType,
   Mesh,
   OrthographicCamera,
+  RGBAFormat,
   Scene,
   Vector3,
 } from 'three/webgpu'
+import { ATMOSPHERE_GAIN } from '@inertialref/rendering'
+import { KNOT_PADDING } from './cloudKnots.ts'
+import { type CloudFrontHandle, createCloudFrontHandle } from './cloudSystem.ts'
+import type { CloudTraceTextures } from './cloudTrace.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { createRingMaterial } from './planet.ts'
 import { proceduralRingStrip } from './proceduralRings.ts'
@@ -186,5 +194,118 @@ describe('a ring against phase', () => {
       expect(median).toBeGreaterThan(1e-3)
     }
     console.log(rows.join('\n'))
+  })
+})
+
+/*
+ * Behind a cloud, through the engine's front handle (design §4.9).
+ *
+ * The cloud is analytic: one trace texel holding one knot, a slab whose
+ * entry and exit are given in kilometers along every ray with its
+ * transmittance and light at the exit, in the half floats the trace writes.
+ * The ring is made opaque, so its blend is a replacement and each pixel is
+ * `color·T + L` exactly; built before the handle follows anything, as the
+ * page builds it before the first cloud frame.
+ */
+
+/** A one-texel trace: one slab's knot, the other three padding. */
+function slab(
+  [entry, exit]: readonly [number, number],
+  through: number,
+  light: number,
+): CloudTraceTextures {
+  const half = (values: readonly number[]) =>
+    new Uint16Array(values.map((v) => DataUtils.toHalfFloat(v)))
+  const pad = KNOT_PADDING.depth
+  const depth = new DataTexture(
+    half([entry, exit, pad, pad, pad, pad, pad, pad]),
+    2,
+    1,
+    RGBAFormat,
+    HalfFloatType,
+  )
+  // Knot k at (k & 1, k >> 1): the slab's first, padding after.
+  const knots = new DataTexture(
+    half([
+      ...[light, light, light, through],
+      ...[0, 0, 0, 1],
+      ...[0, 0, 0, 1],
+      ...[0, 0, 0, 1],
+    ]),
+    2,
+    2,
+    RGBAFormat,
+    HalfFloatType,
+  )
+  depth.needsUpdate = true
+  knots.needsUpdate = true
+  return {
+    light: depth,
+    aux: depth,
+    knotDepth: depth,
+    knotLight: knots,
+    extent: { width: 1, height: 1 },
+  } as unknown as CloudTraceTextures
+}
+
+describe('a ring seen through the clouds in front of it', () => {
+  const THROUGH = 0.4
+  const LIGHT = 0.05
+  /** The knots are half floats: a step of 2⁻¹¹ under one, and the light's own beside it. */
+  const WITHIN = 2e-3
+
+  async function drawn(front?: CloudFrontHandle, follow?: CloudTraceTextures) {
+    const ring = createRingMaterial(front)
+    // Opaque: optical depth this deep blocks every line of sight.
+    ring.opticalDepth.value = 50
+    ring.innerFraction.value = 0.25
+    ring.sunDirection.value.set(0, 1, 0)
+    ring.bodyRadius.value = 0
+    const mesh = new Mesh(annulus(), ring.material)
+    const scene = new Scene()
+    scene.add(mesh)
+    // Three meters over the ring's plane, so every fragment is 3.0 to 3.2 m out.
+    const camera = new OrthographicCamera(-1.1, 1.1, 1.1, -1.1, 0.1, 10)
+    camera.position.set(0, 3, 0)
+    camera.lookAt(new Vector3(0, 0, 0))
+    camera.updateMatrixWorld()
+    scene.updateMatrixWorld(true)
+    const draw = () => gpu.draw(scene, camera, { float: true })
+    const clear = await draw()
+    if (front === undefined || follow === undefined) return { clear }
+    front.follow(() => follow)
+    return { clear, seen: await draw() }
+  }
+
+  it('is dimmed and lit by a slab in front of it, and untouched by one behind it', async () => {
+    const { clear: bare } = await drawn()
+    const inFront = await drawn(
+      createCloudFrontHandle(),
+      slab([0.0005, 0.001], THROUGH, LIGHT),
+    )
+    const behind = await drawn(
+      createCloudFrontHandle(),
+      slab([0.01, 0.02], THROUGH, LIGHT),
+    )
+    let covered = 0
+    for (let y = 0; y < bare.height; y += 1)
+      for (let x = 0; x < bare.width; x += 1) {
+        const color = bare.at(x, y)
+        if (color[0] + color[1] + color[2] <= 0) continue
+        covered += 1
+        for (let c = 0; c < 3; c += 1) {
+          const ring = color[c]!
+          // A handle with no trace yet is clear air: the phase-0 ring.
+          expect(inFront.clear.at(x, y)[c]).toBe(ring)
+          expect(behind.seen!.at(x, y)[c]).toBe(ring)
+          const expected = ring * THROUGH + LIGHT * ATMOSPHERE_GAIN
+          expect(
+            Math.abs(inFront.seen!.at(x, y)[c]! - expected),
+            `(${x}, ${y}) channel ${c}`,
+          ).toBeLessThanOrEqual(WITHIN * expected)
+        }
+      }
+    // A ring that drew nothing would pass every comparison above.
+    expect(covered).toBeGreaterThan(500)
   })
 })

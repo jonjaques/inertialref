@@ -255,7 +255,11 @@ The ≤4 s cold-load budget in
 [`docs/design/technical.md`](../../docs/design/technical.md) is still unmeasured
 on a 20 Mbit connection. If it needs shortening, this is the only line worth an
 hour: upload the loaded system's maps first and let the rest trail the reveal,
-or move the set to a GPU-compressed container so the decode disappears.
+or move the set to a GPU-compressed container so the decode disappears. No
+one block format covers the machines that run this: BC is on nearly every
+Windows device and ASTC on nearly none, and on Macs the other way round, so
+the container is one transcoded at load or two encodings
+([the frame](the-frame.md) §9 has the survey's figures).
 
 ### The default sky has a progressive cache; final boot timing is open
 

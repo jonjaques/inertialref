@@ -1,0 +1,450 @@
+[
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "tau-ceti-dusk",
+    "dpr": 1,
+    "picture": "msaa:native:standard",
+    "runs": [
+      4.501666667064031, 4.480000000198682, 4.484999999900659,
+      4.485000000397364, 4.465000000099341
+    ],
+    "median": 4.484999999900659,
+    "path": "native",
+    "render": "1600x900",
+    "display": "1600x900",
+    "workingTextureBytes": 0,
+    "initMs": 0,
+    "resets": 0,
+    "patches": 906,
+    "settled": true,
+    "hashBefore": "364ede9e",
+    "hashAfter": "364ede9e",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "tau-ceti-dusk",
+    "dpr": 1,
+    "picture": "temporal:native:standard",
+    "runs": [
+      5.13666666696469, 5.15, 5.130000000198682, 5.131666666766008,
+      5.176666667064031
+    ],
+    "median": 5.13666666696469,
+    "path": "temporal",
+    "render": "1600x900",
+    "display": "1600x900",
+    "workingTextureBytes": 107283217,
+    "initMs": 13.699999988079071,
+    "resets": 2,
+    "patches": 906,
+    "settled": true,
+    "hashBefore": "364ede9e",
+    "hashAfter": "364ede9e",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "tau-ceti-dusk",
+    "dpr": 1,
+    "picture": "temporal:quality:standard",
+    "runs": [
+      3.8733333334326745, 3.8516666665673256, 3.919999999801318,
+      3.8466666668653486, 3.8633333335320157
+    ],
+    "median": 3.8633333335320157,
+    "path": "temporal",
+    "render": "1066x600",
+    "display": "1600x900",
+    "workingTextureBytes": 79668017,
+    "initMs": 1.199999988079071,
+    "resets": 2,
+    "patches": 906,
+    "settled": true,
+    "hashBefore": "364ede9e",
+    "hashAfter": "364ede9e",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "tau-ceti-dusk",
+    "dpr": 1,
+    "picture": "temporal:performance:standard",
+    "runs": [
+      3.2783333331346514, 3.2700000002980234, 3.290000000099341,
+      3.2733333334326744, 3.2933333332339925
+    ],
+    "median": 3.2783333331346514,
+    "path": "temporal",
+    "render": "800x450",
+    "display": "1600x900",
+    "workingTextureBytes": 70024017,
+    "initMs": 0.5,
+    "resets": 2,
+    "patches": 906,
+    "settled": true,
+    "hashBefore": "364ede9e",
+    "hashAfter": "364ede9e",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "tau-ceti-dusk",
+    "dpr": 2,
+    "picture": "msaa:native:standard",
+    "runs": [
+      14.016666666666667, 14.040000000099342, 14.033333333333333,
+      14.014999999602635, 14.051666666567325
+    ],
+    "median": 14.033333333333333,
+    "path": "native",
+    "render": "3200x1800",
+    "display": "3200x1800",
+    "workingTextureBytes": 0,
+    "initMs": 0,
+    "resets": 0,
+    "patches": 1227,
+    "settled": true,
+    "hashBefore": "d2a6d968",
+    "hashAfter": "d2a6d968",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "tau-ceti-dusk",
+    "dpr": 2,
+    "picture": "temporal:native:standard",
+    "runs": [
+      15.95166666706403, 15.95, 15.963333333532015, 15.955000000198682,
+      15.958333333333334
+    ],
+    "median": 15.955000000198682,
+    "path": "temporal",
+    "render": "3200x1800",
+    "display": "3200x1800",
+    "workingTextureBytes": 429120017,
+    "initMs": 124.10000002384186,
+    "resets": 2,
+    "patches": 1227,
+    "settled": true,
+    "hashBefore": "d2a6d968",
+    "hashAfter": "d2a6d968",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "tau-ceti-dusk",
+    "dpr": 2,
+    "picture": "temporal:quality:standard",
+    "runs": [
+      11.541666666666666, 11.52833333313465, 11.543333333233992,
+      11.556666666766008, 11.531666666269302
+    ],
+    "median": 11.541666666666666,
+    "path": "temporal",
+    "render": "2133x1200",
+    "display": "3200x1800",
+    "workingTextureBytes": 318712817,
+    "initMs": 8.399999976158142,
+    "resets": 2,
+    "patches": 1227,
+    "settled": true,
+    "hashBefore": "d2a6d968",
+    "hashAfter": "d2a6d968",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "tau-ceti-dusk",
+    "dpr": 2,
+    "picture": "temporal:performance:standard",
+    "runs": [
+      9.433333333333334, 9.438333333532016, 9.435000000397364,
+      9.441666666666666, 9.395000000298023
+    ],
+    "median": 9.435000000397364,
+    "path": "temporal",
+    "render": "1600x900",
+    "display": "3200x1800",
+    "workingTextureBytes": 280083217,
+    "initMs": 1.600000023841858,
+    "resets": 2,
+    "patches": 1227,
+    "settled": true,
+    "hashBefore": "d2a6d968",
+    "hashAfter": "d2a6d968",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "far-shore",
+    "dpr": 1,
+    "picture": "msaa:native:standard",
+    "runs": [
+      7.158333333333333, 7.11333333303531, 7.146666666368644, 7.161666666467984,
+      7.126666666567326
+    ],
+    "median": 7.146666666368644,
+    "path": "native",
+    "render": "1600x900",
+    "display": "1600x900",
+    "workingTextureBytes": 0,
+    "initMs": 0,
+    "resets": 0,
+    "patches": 777,
+    "settled": true,
+    "hashBefore": "3adfd3f3",
+    "hashAfter": "3adfd3f3",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "far-shore",
+    "dpr": 1,
+    "picture": "temporal:native:standard",
+    "runs": [
+      6.283333333333333, 6.290000000099341, 6.290000000099341,
+      6.298333333432675, 6.301666667064031
+    ],
+    "median": 6.290000000099341,
+    "path": "temporal",
+    "render": "1600x900",
+    "display": "1600x900",
+    "workingTextureBytes": 107283217,
+    "initMs": 56.60000002384186,
+    "resets": 2,
+    "patches": 777,
+    "settled": true,
+    "hashBefore": "3adfd3f3",
+    "hashAfter": "3adfd3f3",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "far-shore",
+    "dpr": 1,
+    "picture": "temporal:quality:standard",
+    "runs": [
+      4.414999999602636, 4.390000000099341, 4.381666666766008,
+      4.423333333432675, 4.405000000198682
+    ],
+    "median": 4.405000000198682,
+    "path": "temporal",
+    "render": "1066x600",
+    "display": "1600x900",
+    "workingTextureBytes": 79668017,
+    "initMs": 1,
+    "resets": 2,
+    "patches": 777,
+    "settled": true,
+    "hashBefore": "3adfd3f3",
+    "hashAfter": "3adfd3f3",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "far-shore",
+    "dpr": 1,
+    "picture": "temporal:performance:standard",
+    "runs": [
+      3.969999999801318, 3.9650000000993413, 3.9566666667660075,
+      3.9733333329359692, 3.9650000000993413
+    ],
+    "median": 3.9650000000993413,
+    "path": "temporal",
+    "render": "800x450",
+    "display": "1600x900",
+    "workingTextureBytes": 70024017,
+    "initMs": 0.699999988079071,
+    "resets": 2,
+    "patches": 777,
+    "settled": true,
+    "hashBefore": "3adfd3f3",
+    "hashAfter": "3adfd3f3",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "far-shore",
+    "dpr": 2,
+    "picture": "msaa:native:standard",
+    "runs": [
+      24.304999999701977, 24.406666666269302, 24.373333333432676,
+      24.398333333432674, 24.298333333432673
+    ],
+    "median": 24.373333333432676,
+    "path": "native",
+    "render": "3200x1800",
+    "display": "3200x1800",
+    "workingTextureBytes": 0,
+    "initMs": 0,
+    "resets": 0,
+    "patches": 867,
+    "settled": true,
+    "hashBefore": "6144d33b",
+    "hashAfter": "6144d33b",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "far-shore",
+    "dpr": 2,
+    "picture": "temporal:native:standard",
+    "runs": [
+      20.508333333333333, 20.49333333323399, 20.501666666567324,
+      20.48499999990066, 20.453333333631356
+    ],
+    "median": 20.49333333323399,
+    "path": "temporal",
+    "render": "3200x1800",
+    "display": "3200x1800",
+    "workingTextureBytes": 429120017,
+    "initMs": 245.90000000596046,
+    "resets": 2,
+    "patches": 867,
+    "settled": true,
+    "hashBefore": "6144d33b",
+    "hashAfter": "6144d33b",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "far-shore",
+    "dpr": 2,
+    "picture": "temporal:quality:standard",
+    "runs": [
+      13.334999999900658, 13.246666666368643, 13.27333333293597, 13.25,
+      13.241666666666667
+    ],
+    "median": 13.25,
+    "path": "temporal",
+    "render": "2133x1200",
+    "display": "3200x1800",
+    "workingTextureBytes": 318712817,
+    "initMs": 9.699999988079071,
+    "resets": 2,
+    "patches": 867,
+    "settled": true,
+    "hashBefore": "6144d33b",
+    "hashAfter": "6144d33b",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  },
+  {
+    "tree": "tip",
+    "build": {
+      "id": "23f173bc",
+      "tree": null
+    },
+    "preset": "far-shore",
+    "dpr": 2,
+    "picture": "temporal:performance:standard",
+    "runs": [
+      10.456666666766008, 10.420000000298023, 10.475, 10.366666666666667,
+      10.393333333233992
+    ],
+    "median": 10.420000000298023,
+    "path": "temporal",
+    "render": "1600x900",
+    "display": "3200x1800",
+    "workingTextureBytes": 280083217,
+    "initMs": 1.199999988079071,
+    "resets": 2,
+    "patches": 867,
+    "settled": true,
+    "hashBefore": "6144d33b",
+    "hashAfter": "6144d33b",
+    "sameRenderer": true,
+    "dialogs": 0,
+    "route": "/planetarium"
+  }
+]

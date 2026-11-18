@@ -4,6 +4,9 @@ Status: accepted · 6 Sep 2026
 
 [ADR-0037](0037-the-enhanced-camera.md) owns the three camera modes. Version 2
 pictures record that processing choice alongside pose, time and lens.
+[ADR-0067](0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md)
+amends this record: version 3 is version 2 with an optional `weather`, and
+the cornerstones are a second bundled list `findPicture` searches.
 
 ## Context
 

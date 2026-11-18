@@ -8,6 +8,12 @@ import type { PassReport } from './passReport.ts'
 import type { PictureReport } from './pictureReport.ts'
 import type { TerrainReport } from './descent.ts'
 import type { GalaxyRenderReport } from './galaxy.ts'
+import {
+  CLOUD_SETTLE_FRAMES,
+  type CloudRenderReport,
+  cloudReportIdle,
+  cloudsSettled,
+} from './clouds.ts'
 import type { TimingPort } from './profile.ts'
 import { DEFAULT_PICTURE_PROCESSING } from './pictureProcessing.ts'
 import { PICTURES } from './pictures.ts'
@@ -90,6 +96,8 @@ describe('renderHost, the render side of a host that has none', () => {
     expect(host.frameStats()).toBeNull()
     expect(host.boot()).toBe('booted')
     expect(host.galaxyRender()).toBeNull()
+    expect(host.clouds()).toBeNull()
+    await expect(host.cloudRadiance()).resolves.toBeNull()
     expect(host.terrain()).toBeNull()
     expect(host.lensView()).toBeNull()
     expect(host.framingLens()).toBe(LENS_PRESETS.flight)
@@ -270,6 +278,7 @@ describe('measurement verbs', () => {
       ok: true,
       galaxy: null,
       terrain: null,
+      clouds: null,
     })
     let pending = 3
     let deposits = true
@@ -312,6 +321,31 @@ describe('measurement verbs', () => {
       ok: true,
       galaxy: null,
       terrain: null,
+      clouds: null,
+    })
+  })
+
+  it('settled waits on the clouds’ own settle, and on nothing when they are off', () => {
+    let report: CloudRenderReport | null = null
+    const live = session({ clouds: () => report })
+    // No system: the page settles as it does with no clouds.
+    expect(live.harness.settled().ok).toBe(true)
+    // A system that is off reports no settle.
+    report = cloudReportIdle()
+    expect(live.harness.settled()).toMatchObject({ ok: true, clouds: null })
+    const drawing = (sinceReset: number): CloudRenderReport => {
+      const rest = { ...cloudReportIdle(), on: true, sinceReset }
+      return { ...rest, settle: cloudsSettled(rest) }
+    }
+    report = drawing(CLOUD_SETTLE_FRAMES - 1)
+    expect(live.harness.settled()).toMatchObject({
+      ok: false,
+      clouds: { pending: true, history: '31/32', caches: 'ready' },
+    })
+    report = drawing(CLOUD_SETTLE_FRAMES)
+    expect(live.harness.settled()).toMatchObject({
+      ok: true,
+      clouds: { pending: false, history: '32/32' },
     })
   })
 })
@@ -432,6 +466,33 @@ describe('the galaxy inspector', () => {
         .harness.galaxy()
         .render(),
     ).toBe(report)
+  })
+})
+
+describe('the clouds’ report', () => {
+  it('reads the system’s report through the host, and null with none', () => {
+    const report = cloudReportIdle()
+    expect(session().harness.clouds()).toBeNull()
+    expect(session({ clouds: () => report }).harness.clouds()).toBe(report)
+  })
+
+  it('captures the radiance through the host, null with none, and differences two captures', async () => {
+    const capture = {
+      width: 2,
+      height: 1,
+      luminance: Float32Array.from([1, 3]),
+      cloud: Uint8Array.from([1, 0]),
+    }
+    await expect(session().harness.cloudRadiance()).resolves.toBeNull()
+    const ir = session({ cloudRadiance: async () => capture }).harness
+    await expect(ir.cloudRadiance()).resolves.toBe(capture)
+    const lit = { ...capture, luminance: Float32Array.from([2, 3]) }
+    expect(ir.cloudRadianceDifference(capture, lit)).toEqual({
+      texels: 1,
+      rmse: 1,
+      mean: 1.5,
+      relative: 1 / 1.5,
+    })
   })
 })
 
@@ -584,6 +645,14 @@ describe('help', () => {
 
   it('names the build verb a rig checks the served tree with', () => {
     expect(session().harness.help()).toContain('ir.build()')
+  })
+
+  it('names the clock verb a cast of the weather runs', () => {
+    expect(session().harness.help()).toContain('ir.runClock(start, warp)')
+  })
+
+  it('names the engine verb the overlay stance lights', () => {
+    expect(session().harness.help()).toContain('ir.lightEngine(on?)')
   })
 
   it('lists the scenarios, the scenes and the shots by their ids', () => {

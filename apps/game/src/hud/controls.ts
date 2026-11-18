@@ -331,6 +331,8 @@ export interface HudRenderState {
     readonly height: number
   } | null
   readonly pictureOverride?: Picture | null
+  /** A link's `?clouds=` chose this page's clouds, and the setting waits for the next page. */
+  readonly cloudsLinked?: boolean
   /**
    * Ask for a specific state, not the next one.
    *

@@ -1,0 +1,732 @@
+import { writeFileSync } from 'node:fs'
+import { SLAB_SUN_HOLD, toHalves } from '@inertialref/rendering'
+import { capMoments } from './legendre.ts'
+import { SOLAR_ANGULAR_RADIUS, meanMoments } from './moments.ts'
+import {
+  ALONG,
+  COSINE,
+  ONE,
+  harmonic,
+  hemispheres,
+  lobeBasis,
+  quadratureCosines,
+  stretched,
+  tabulate,
+  threeTerms,
+  times,
+  viewNodes,
+  type SourceForm,
+  type ViewNodesOptions,
+} from './slabForms.ts'
+import {
+  judge,
+  type JudgedFlux,
+  type JudgedRow,
+  type Reconstruction,
+  type SlabScale,
+} from './slabJudge.ts'
+import { icePopulation, iceTransport, type IceTransportRow } from './slabIce.ts'
+import {
+  OUTSIDE_SETS,
+  OUTSIDE_STREAMS,
+  SAMPLE_STREAMS,
+  outsideRows,
+  outsideSample,
+  type OutsideName,
+  type OutsideSet,
+} from './slabOutside.ts'
+import {
+  type SourceBearings,
+  type SourceGrid,
+  type SourceMedium,
+  type SourceTable,
+} from './slabSource.ts'
+import {
+  RENDERING,
+  loadStage,
+  loadTable,
+  saveStage,
+  saveTable,
+} from './slabStages.ts'
+import {
+  SLAB_DOMAIN,
+  SLAB_STREAMS,
+  SOURCE_RADIUS,
+  slabPopulation,
+  type ReferenceStage,
+  type SlabPopulation,
+} from './slabTables.ts'
+import {
+  outsideHeader,
+  outsideFields,
+  outsideVerdict,
+  type OutsideVerdict,
+} from './slabVerdict.ts'
+import { comment, percent } from './slabText.ts'
+
+/*
+ * The source tables' generator: the oracle's interior field, fitted by every
+ * form a table can take (`slabForms.ts`), judged against the oracle's rows
+ * (`slabJudge.ts`), and one form written as the table a march reads. It runs
+ * in stages as `slabTables.ts` does, into the same directory, and reads that
+ * generator's `reference` stages:
+ *
+ *   node apps/ingest/src/transport/slabSourceTable.ts stage 20 0 4     (every form at 20 depth nodes: part, parts)
+ *   node apps/ingest/src/transport/slabSourceTable.ts merge 20 4       (a grid's parts as one)
+ *   node apps/ingest/src/transport/slabSourceTable.ts transport
+ *   node apps/ingest/src/transport/slabSourceTable.ts outside <set>    (views, between, low, thin, deep: a process each)
+ *   node apps/ingest/src/transport/slabSourceTable.ts sample           (the slow test's samples of them)
+ *   node apps/ingest/src/transport/slabSourceTable.ts ice              (the ice rows' scales, and the oracle on three of them)
+ *   node apps/ingest/src/transport/slabSourceTable.ts judge 20         (every form's judgment, printed and kept)
+ *   node apps/ingest/src/transport/slabSourceTable.ts write
+ *   pnpm exec prettier -w packages/rendering/src/slabSource*.generated.ts
+ *
+ * `stage <nodes>` takes any node count, so a form is judged at 16 or 32
+ * nodes by naming them; `write` reads the count in `VIEW_GRID`.
+ */
+
+/** What every source table's axes share. */
+export const SOURCE_AXES = {
+  sunMuMin: 0.05,
+  depthScale: 0.02,
+  depthMax: 16,
+} as const
+
+/**
+ * The view table's grid. At sixteen depth nodes, eight suns leave the
+ * table's own interpolation 16% off at worst, fifteen 8.0% and twenty-nine
+ * 7.5%. Sixteen depth nodes read 7.5% where twenty read 5.6%, and
+ * thirty-two read 5.7%: what is left at twenty is the one table's distance
+ * from the other radii, which no node count shortens.
+ */
+export const VIEW_GRID: SourceGrid = { ...SOURCE_AXES, nodes: 20, suns: 15 }
+
+/**
+ * Bearings the forms are fitted on: a trapezoid's thirty-three from the
+ * sun's own bearing to the one opposite, so that a fit sees both ends.
+ */
+export const VIEW_BEARINGS: SourceBearings = { count: 33, ends: true }
+
+/**
+ * Where the view table's cosines are sought, each hemisphere; the table's
+ * are the oracle's quadrature cosines nearest them. The two ends are the
+ * horizon and the normal: without them the worst radiance is 31% off, at a
+ * grazing view. The last three are 0.92, 0.98 and 1 rather than 0.82, 0.94
+ * and 1 because the judged views are not the only ones: with nodes beside
+ * the domain's μ 0.4 and 0.8 and a gap from 19° to 1.5° off the normal, the
+ * domain read 0.1 point better and the views between it 2.4 points worse,
+ * 8.47% at μ 0.975.
+ */
+export const VIEW_COSINES = [
+  0, 0.05, 0.15, 0.3, 0.47, 0.64, 0.8, 0.92, 0.98, 1,
+] as const
+
+/** The view table's stretch of the bearing: ψ = π·(φ/π)^0.65. */
+export const VIEW_STRETCH = 0.65
+
+/**
+ * Which first moment turns a scaled depth into a table's transport depth:
+ * the formula's g′ = (g − f_δ)/(1 − f_δ), or the scaled phase's own χ′₁.
+ * They differ by 0.005 at 10 µm and by 0.009 at 6 µm, and the difference
+ * is 0.5 point of a slab's reflected flux: similarity between radii holds
+ * in the moment the phase has, not in the one the formula gives it.
+ */
+export type SourceTransport = 'formula' | 'moment'
+
+/** The medium a source table is cut from: a population's three bands as one, scaled. */
+export function sourceMedium(
+  population: SlabPopulation,
+  transport: SourceTransport,
+): SourceMedium {
+  const moments = meanMoments(
+    population.bands.map((band) => band.scaled.moments as Float64Array),
+  )
+  const cap = capMoments(SOLAR_ANGULAR_RADIUS, moments.length)
+  return {
+    moments,
+    convolved: moments.map((value, l) => value * cap[l]!),
+    asymmetry:
+      transport === 'formula' ? population.asymmetry : population.moment,
+  }
+}
+
+/** The view table's form: its cosines' targets, its stretch, and how a ray blends two cosines. */
+export function viewForm(
+  options: Pick<ViewNodesOptions, 'name' | 'blend'> & {
+    readonly cosines?: readonly number[]
+    readonly stretch?: number
+  },
+): SourceForm {
+  const stretch = options.stretch ?? VIEW_STRETCH
+  return viewNodes({
+    name: options.name,
+    cosines: options.cosines ?? [
+      ...quadratureCosines(SLAB_STREAMS.scaled, VIEW_COSINES),
+    ],
+    basis: [0, 1, 2, 3].map((k) =>
+      stretch === 1 ? harmonic(k) : stretched(k, stretch),
+    ),
+    measure: 'relative',
+    blend: options.blend,
+    ...(stretch === 1 ? {} : { stretch }),
+  })
+}
+
+/** The three-term forms, by the lobe's asymmetry: both measures, with the lobe and without. */
+export function threeForms(lobe: number): SourceForm[] {
+  return (['relative', 'absolute'] as const).flatMap((measure) =>
+    [true, false].map((withLobe) => threeTerms({ lobe, measure, withLobe })),
+  )
+}
+
+/**
+ * Every form a grid's stage fits, by name. `asymmetry` is the medium's, and
+ * the lobes are about its square, the twice-scattered phase's asymmetry.
+ *
+ *   three-…            J₀ + J₁·μ_v + J_f·Φ(ν) over the sphere: one read a step
+ *   hemispheres        the same three terms, each hemisphere apart: one read
+ *   hemispheres-plain  (J₀, J₁) each hemisphere: one read
+ *   hemispheres-wide   eight terms each hemisphere: two reads
+ *   views-fourier      ten cosines a hemisphere, cos kφ, blended in the cosine: two reads
+ *   views              ten cosines, cos kψ, blended in the angle: two reads
+ *   views-nearest      the same table, the nearer cosine alone: one read
+ *   views-dense        twenty-four cosines, the nearer alone: one read
+ */
+export function sourceForms(asymmetry: number): SourceForm[] {
+  const lobe = lobeBasis(asymmetry ** 2)
+  const dense = Array.from({ length: 24 }, (_, i) =>
+    Math.cos(((23 - i) / 23) * (Math.PI / 2)),
+  )
+  return [
+    ...threeForms(asymmetry ** 2),
+    hemispheres({
+      name: 'hemispheres',
+      basis: [ONE, COSINE, lobe],
+      measure: 'relative',
+    }),
+    hemispheres({
+      name: 'hemispheres-plain',
+      basis: [ONE, COSINE],
+      measure: 'relative',
+    }),
+    hemispheres({
+      name: 'hemispheres-wide',
+      basis: [
+        ONE,
+        COSINE,
+        lobe,
+        times(COSINE, COSINE),
+        ALONG,
+        times(COSINE, lobe),
+        lobeBasis(0.8),
+        times(ALONG, COSINE),
+      ],
+      measure: 'relative',
+    }),
+    viewForm({ name: 'views-fourier', blend: 'cosine', stretch: 1 }),
+    viewForm({ name: 'views', blend: 'angle' }),
+    viewForm({ name: 'views-nearest', blend: 'nearest' }),
+    viewForm({
+      name: 'views-dense',
+      blend: 'nearest',
+      cosines: quadratureCosines(SLAB_STREAMS.scaled, dense),
+    }),
+  ]
+}
+
+/** What a stage says of its tables; each form's table is a file of its own beside it. */
+export interface SourceStage {
+  readonly name: string
+  readonly grid: SourceGrid
+  readonly streams: number
+  readonly transport: SourceTransport
+  /** The medium's first moment, by `transport`, and its moments' digest. */
+  readonly asymmetry: number
+  readonly digest: string
+  readonly delta: number
+  readonly modes: number
+  readonly forms: readonly string[]
+}
+
+/** A grid's name as a stage: a count of depth nodes. */
+function stagePlan(name: string): {
+  grid: SourceGrid
+  transport: SourceTransport
+  bearings: SourceBearings
+  forms: (asymmetry: number) => SourceForm[]
+} {
+  const nodes = Number(name)
+  if (!Number.isInteger(nodes) || nodes < 2)
+    throw new Error(`slabSourceTable: ${name} is not a grid`)
+  return {
+    grid: { ...VIEW_GRID, nodes },
+    transport: 'moment',
+    bearings: VIEW_BEARINGS,
+    forms: sourceForms,
+  }
+}
+
+function runStage(name: string, part: number, parts: number): void {
+  const plan = stagePlan(name)
+  const population = slabPopulation(SOURCE_RADIUS)
+  const medium = sourceMedium(population, plan.transport)
+  const forms = plan.forms(medium.asymmetry)
+  const rows = Array.from({ length: plan.grid.nodes }, (_, i) => i).filter(
+    (i) => i % parts === part,
+  )
+  const made = tabulate(medium, plan.grid, SLAB_STREAMS.scaled, forms, {
+    rows,
+    bearings: plan.bearings,
+  })
+  const tag = parts === 1 ? name : `${name}-${part}of${parts}`
+  for (const form of forms)
+    saveTable(`source-${tag}-${form.name}`, made.tables.get(form.name)!)
+  saveStage(`source-${tag}`, {
+    name,
+    grid: plan.grid,
+    streams: SLAB_STREAMS.scaled,
+    transport: plan.transport,
+    asymmetry: medium.asymmetry,
+    digest: population.digest,
+    delta: made.delta,
+    modes: made.modes,
+    forms: forms.map((form) => form.name),
+  } satisfies SourceStage)
+}
+
+/** A grid's parts as one stage: a part holds zeros where another holds a row. */
+function mergeStage(name: string, parts: number): void {
+  const stages = Array.from({ length: parts }, (_, part) =>
+    loadStage<SourceStage>(`source-${name}-${part}of${parts}`),
+  )
+  for (const form of stages[0]!.forms) {
+    const sum = loadTable(`source-${name}-0of${parts}-${form}`)
+    for (let part = 1; part < parts; part += 1) {
+      const more = loadTable(`source-${name}-${part}of${parts}-${form}`)
+      for (let at = 0; at < sum.length; at += 1) sum[at] = sum[at]! + more[at]!
+    }
+    saveTable(`source-${name}-${form}`, sum)
+  }
+  saveStage(`source-${name}`, stages[0]!)
+}
+
+/**
+ * A stage's table of one form, as a march reads it: every texel a half
+ * float's value, rounded once from the fit's own. Through a float32 on the
+ * way it is rounded twice, and one texel in six thousand lands on the other
+ * half float.
+ */
+export function stageTable(stage: SourceStage, form: SourceForm): SourceTable {
+  return {
+    ...stage.grid,
+    slabs: form.slabs,
+    terms: loadTable(`source-${stage.name}-${form.name}`).map(Math.f16round),
+  }
+}
+
+/** One radius of the transport stage: what its scaled depth is turned into a transport depth by. */
+export interface TransportRow {
+  readonly radius: number
+  readonly share: number
+  /** g′ by the formula, and χ′₁, the scaled phase's own first moment. */
+  readonly asymmetry: number
+  readonly moment: number
+}
+
+/** µm: the radii the transport stage is made at, the domain's among them. */
+export const TRANSPORT_RADII = [2, 3, 4, 6, 8, 10, 12, 16, 20, 25, 32] as const
+
+/**
+ * Each radius's scale by a table's convention. A table cut by the moment
+ * is read by each radius's own; one cut by the formula, by the formula's.
+ */
+export function sourceScales(
+  transport: SourceTransport,
+  rows: readonly TransportRow[],
+): SlabScale[] {
+  return rows.map((row) => ({
+    radius: row.radius,
+    share: row.share,
+    asymmetry: transport === 'formula' ? row.asymmetry : row.moment,
+  }))
+}
+
+/**
+ * The formula's scales on a table cut by the moment: each radius's 1 − g′
+ * in the ratio it bears to the table's own radius, which is what a reader
+ * that knows only g′ can do.
+ */
+export function formulaScales(rows: readonly TransportRow[]): SlabScale[] {
+  const own = rows.find((row) => row.radius === SOURCE_RADIUS)!
+  return rows.map((row) => ({
+    radius: row.radius,
+    share: row.share,
+    asymmetry:
+      1 - ((1 - row.asymmetry) * (1 - own.moment)) / (1 - own.asymmetry),
+  }))
+}
+
+/** The oracle's rows and fluxes a table is judged on. */
+interface Judged {
+  readonly rows: readonly JudgedRow[]
+  readonly fluxes: readonly JudgedFlux[]
+}
+
+function judgedRows(): Judged {
+  const references = SLAB_DOMAIN.radii.map((radius) =>
+    loadStage<ReferenceStage>(`reference-${radius}`),
+  )
+  return {
+    rows: references.flatMap((stage) => stage.rows),
+    fluxes: references.flatMap((stage) => stage.fluxes),
+  }
+}
+
+/** The ice rows the view table is judged on, by effective diameter: 20, 50 and 100 µm. */
+export const ICE_JUDGED_ROWS = [2, 8, 18] as const
+
+/** Where the ice is judged: τ of cirrus, and the suns its levels see. */
+export const ICE_SET: OutsideSet = {
+  name: 'ice',
+  depths: [0.1, 0.2, 0.4, 1, 2],
+  suns: [0.2, 0.5, 0.77],
+  views: SLAB_DOMAIN.views,
+  azimuths: SLAB_DOMAIN.azimuths,
+  radii: [],
+}
+
+/** The ice rows' transport scales, and the oracle on the ice phase at the judged rows. */
+function iceStage(): void {
+  saveStage('ice-transport', iceTransport())
+  for (const row of ICE_JUDGED_ROWS)
+    saveStage(
+      `ice-${row}`,
+      outsideRows(ICE_SET, icePopulation(row), OUTSIDE_STREAMS),
+    )
+}
+
+/** Every set's sample, as the slow test solves it: what its ceilings are taken from. */
+function sampleStage(): void {
+  for (const set of Object.values(OUTSIDE_SETS))
+    for (const radius of set.radii)
+      saveStage(
+        `sample-${set.name}-${radius}`,
+        outsideRows(outsideSample(set), slabPopulation(radius), SAMPLE_STREAMS),
+      )
+}
+
+/** One of the sets outside the domain, solved at each of its radii. */
+function outsideStage(name: string): void {
+  if (!(name in OUTSIDE_SETS))
+    throw new Error(`slabSourceTable: ${name} is not a set outside the domain`)
+  const set = OUTSIDE_SETS[name as OutsideName]
+  for (const radius of set.radii)
+    saveStage(
+      `outside-${name}-${radius}`,
+      outsideRows(set, slabPopulation(radius), OUTSIDE_STREAMS),
+    )
+}
+
+const tenth = (value: number): string => (100 * value).toFixed(1)
+
+/** A judgment as a line of a table: the columns a report carries. */
+export function judgmentLine(name: string, judged: Reconstruction): string {
+  return [
+    name.padEnd(24),
+    `worst ${percent(judged.error)} rms ${percent(judged.rms)}`,
+    `p50 ${percent(judged.median)} p95 ${percent(judged.ninetyFifth)} p99 ${percent(judged.ninetyNinth)}`,
+    `flux ${percent(judged.flux)}`,
+    `over 5%: ${judged.over} of ${judged.count}`,
+    `μ₀ ${judged.bySun.map(([sun, error]) => `${sun}: ${tenth(error)}`).join(' ')}`,
+    `τ ${judged.byDepth.map(([depth, error]) => `${depth}: ${tenth(error)}`).join(' ')}`,
+    `thin ${judged.thin.map(tenth).join(' ')}`,
+    `at ${judged.worst}`,
+  ].join(' | ')
+}
+
+/** Every form of a stage judged, printed a line each and kept. */
+function judgeStage(name: string): void {
+  const stage = loadStage<SourceStage>(`source-${name}`)
+  const transport = loadStage<TransportRow[]>('transport')
+  const { rows, fluxes } = judgedRows()
+  const forms = sourceForms(stage.asymmetry)
+  const scales = sourceScales(stage.transport, transport)
+  const kept: Record<string, Reconstruction> = {}
+  const say = (label: string, judged: Reconstruction): void => {
+    kept[label] = judged
+    console.log(judgmentLine(label, judged))
+  }
+  for (const form of forms)
+    say(form.name, judge(stageTable(stage, form), form, scales, rows, fluxes))
+  if (stage.transport === 'moment') {
+    const form = forms.find((item) => item.name === 'views')!
+    say(
+      'views, by the formula',
+      judge(
+        stageTable(stage, form),
+        form,
+        formulaScales(transport),
+        rows,
+        fluxes,
+      ),
+    )
+  }
+  saveStage(`source-${name}-judged`, kept)
+}
+
+/** What `write` judges before it writes anything. */
+export interface SourceVerdict {
+  readonly views: SourceStage
+  readonly transport: readonly TransportRow[]
+  /** The view table, on the domain and off it. */
+  readonly judged: Reconstruction
+  readonly outside: OutsideVerdict
+  readonly ice: readonly IceTransportRow[]
+}
+
+export function decide(): SourceVerdict {
+  const views = loadStage<SourceStage>(`source-${VIEW_GRID.nodes}`)
+  const transport = loadStage<TransportRow[]>('transport')
+  const { rows, fluxes } = judgedRows()
+  const form = viewForm({ name: 'views', blend: 'angle' })
+  const table = stageTable(views, form)
+  const scales = sourceScales(views.transport, transport)
+  const ice = loadStage<IceTransportRow[]>('ice-transport')
+  return {
+    views,
+    transport,
+    judged: judge(table, form, scales, rows, fluxes),
+    outside: outsideVerdict(
+      table,
+      form,
+      scales,
+      ice,
+      ICE_JUDGED_ROWS,
+      ICE_SET.depths,
+    ),
+    ice,
+  }
+}
+
+const four = (value: number): number => Number(value.toPrecision(4))
+
+/** A judgment as a generated file holds it. */
+function reconstructionText(judged: Reconstruction): string {
+  return JSON.stringify({
+    grid: four(judged.grid),
+    held: four(judged.held),
+    rms: four(judged.rms),
+    median: four(judged.median),
+    ninetyFifth: four(judged.ninetyFifth),
+    ninetyNinth: four(judged.ninetyNinth),
+    thin: judged.thin.map(four),
+    flux: four(judged.flux),
+    over: judged.over,
+    count: judged.count,
+  })
+}
+
+/** A table's texels as base64: little-endian half floats, in the table's own order. */
+export function texelsText(table: Float64Array): string {
+  // Rounded to a half float first: `toHalves` is then exact.
+  const halves = toHalves(Float32Array.from(table, Math.f16round))
+  const bytes = Buffer.alloc(halves.length * 2)
+  halves.forEach((bits, at) => bytes.writeUInt16LE(bits, 2 * at))
+  return bytes.toString('base64')
+}
+
+/** `slabSource.generated.ts`'s text, before prettier. */
+export function sourceText(verdict: SourceVerdict): string {
+  const { views, judged } = verdict
+  const cosines = quadratureCosines(views.streams, VIEW_COSINES)
+  const slabs = 2 * cosines.length
+  const bytes = views.grid.nodes ** 2 * views.grid.suns * slabs * 8
+  const rule = verdict.transport.map(
+    (row) => (row.moment - row.asymmetry) * row.radius,
+  )
+  const header = [
+    'Generated by `node apps/ingest/src/transport/slabSourceTable.ts write`',
+    'from the stages its header lists; rerun them rather than editing, then',
+    '`pnpm exec prettier -w` this file.',
+    '',
+    'The higher orders’ source function in a plane slab of the renderer’s scaled',
+    'medium, per unit of the sun’s irradiance and of scaled optical depth, sr⁻¹:',
+    'what a march adds a step beyond first order. The table is a fit of the',
+    `adding-doubling oracle’s interior field at ${views.streams} streams (\`slabSource.ts\`),`,
+    `for the droplet table’s population at ${SOURCE_RADIUS} µm with the three bands as one`,
+    `(moments’ digest ${views.digest}), and it is indexed by two transport depths,`,
+    't_d from the lit face and t_b from the far one, on',
+    'u(t) = ln(1 + t/depthScale)/ln(1 + depthMax/depthScale), and by the sun’s',
+    'cosine μ₀ to the lit face’s normal, evenly from `sunMuMin` to 1.',
+    '',
+    '`SLAB_VIEW_SOURCE` is the table a march reads. The source is tabulated at',
+    '`cosines` of μ_v, the cosine to the lit face’s outward normal of light',
+    'traveling to the eye, in each hemisphere: a slab is one hemisphere at one',
+    'cosine, slab = (μ_v ≥ 0 ? 0 : cosines.length) + i. A slab’s texel is the four',
+    'coefficients of the source’s dependence on bearing at that cosine,',
+    '',
+    '  c₀ + c₁·cos ψ + c₂·cos 2ψ + c₃·cos 3ψ        ψ = π·(φ/π)^stretch',
+    '',
+    'with φ, 0 to π, the angle between the light’s direction and the sun’s',
+    'light’s, both laid on the slab’s plane: 0 where the light travels the way',
+    'the sun’s does. A ray straight along the normal has no bearing and takes',
+    'φ = π/2. A ray reads the two slabs whose cosines its |μ_v| lies between,',
+    'blended in the polar angle θ = acos |μ_v|,',
+    '',
+    '  a = (acos cosines[i] − θ)/(acos cosines[i] − acos cosines[i + 1])',
+    '  S_h = (1 − a)·T[i]·w + a·T[i + 1]·w        w = (1, cos ψ, cos 2ψ, cos 3ψ)',
+    '',
+    'and a ray outside the first or the last cosine reads that slab alone. The',
+    'hemisphere, i, a and w are constant along a ray in a plane slab; a step is',
+    'two reads and two products. T[i] is a linear 3D texture’s read: `nodes`',
+    'wide in u(t_d),',
+    '`nodes` high in u(t_b) and 2·cosines.length·`suns` deep, slice',
+    'slab·suns + k for sun node k, read at texel centers,',
+    '',
+    '  x = (u(t_d)·(nodes − 1) + ½)/nodes        y = (u(t_b)·(nodes − 1) + ½)/nodes',
+    '  z = (slab·suns + s·(suns − 1) + ½)/(2·cosines.length·suns)',
+    '',
+    'with s = (μ₀ − sunMuMin)/(1 − sunMuMin) and s·(suns − 1) held to',
+    `[1/${1 / SLAB_SUN_HOLD}, suns − 1 − 1/${1 / SLAB_SUN_HOLD}], so that no read blends two slabs even where the`,
+    'coordinate is formed in float32. Past `depthMax` from the lit face the read',
+    'is the last node’s times (depthMax + t_b + 1.42)/(t_d + t_b + 1.42),',
+    'diffusion’s law, and where the far face is past it as well, times',
+    '2(t_b + 0.71)/(t_d + t_b + 1.42): the two meet at t_b = depthMax.',
+    '`slabSourceRead.ts` is this read on the CPU, both conventions on, and',
+    'every figure here is taken through it.',
+    '',
+    'The texels are a module of their own, `slabSourceTexels.generated.ts`,',
+    `which the package’s index does not export: ${bytes} bytes of little-endian`,
+    'half floats in base64, laid out [slab][sun][bottom][top][channel]. A page',
+    'reaches them by `import()`, so no chunk on its static path carries them.',
+    'The fit at a cosine is least squares on the source over itself at',
+    'thirty-three bearings, the forward cone within 6° of the sun left out.',
+    '',
+    'Its transport depth is t = (1 − χ′₁)·τ′, with χ′₁ the scaled phase’s own first',
+    'moment at the sample’s radius, the three bands’ mean: `transport` is',
+    '1 − χ′₁ at each of its radii. χ′₁ is over the formula’s',
+    `g′ = (g − f_δ)/(1 − f_δ) by ${Math.min(...rule).toFixed(3)}/r to ${Math.max(...rule).toFixed(3)}/r, r the radius in µm, because the`,
+    'diffraction pattern the scaling takes out has wings.',
+    '',
+    '`reconstructionError` is the worst relative error of a slab’s leaving',
+    'radiance rebuilt through the table’s own read, first order beside it,',
+    'against the oracle’s `scaled` rows of `slabReference.generated.ts`: every',
+    'band, radius, depth, sun, view and azimuth of the domain’s grid and held-out',
+    `slabs. On the domain it is ${percent(judged.error)}, at ${judged.worst}.`,
+    `\`reconstruction\` breaks it down: ${percent(judged.grid)} on the grid, ${percent(judged.held)} on the held-out`,
+    `slabs, ${percent(judged.rms)} root mean square; half of the ${judged.count} radiances are within`,
+    `${percent(judged.median)}, 95% within ${percent(judged.ninetyFifth)} and 99% within ${percent(judged.ninetyNinth)}, and ${judged.over} are over 5%;`,
+    `${judged.thin.map(percent).join(', ')} at τ ${SLAB_DOMAIN.depths.thin.join(', ')}; and ${percent(judged.flux)} in the reflected flux, the`,
+    'higher orders summed at eight Gauss points in μ and sixteen azimuths.',
+    '',
+    ...outsideHeader(verdict.outside),
+  ]
+  const body = [
+    'export const SLAB_VIEW_SOURCE = {',
+    "  format: 'inertialref/slab-view-source',",
+    '  version: 1,',
+    `  nodes: ${views.grid.nodes},`,
+    `  suns: ${views.grid.suns},`,
+    `  sunMuMin: ${views.grid.sunMuMin},`,
+    `  depthScale: ${views.grid.depthScale},`,
+    `  depthMax: ${views.grid.depthMax},`,
+    '  /** µm: the radius row the table is generated at. */',
+    `  radius: ${SOURCE_RADIUS},`,
+    '  /** The cosines the view is tabulated at in each hemisphere, ascending. */',
+    `  cosines: ${JSON.stringify(cosines.map((value) => Number(value.toPrecision(9))))},`,
+    '  /** The bearing’s stretch: ψ = π·(φ/π)^stretch. */',
+    `  stretch: ${VIEW_STRETCH},`,
+    '  /** 1 − χ′₁ at each radius, µm: what turns a scaled depth into the table’s transport depth. */',
+    '  transport: ' +
+      JSON.stringify({
+        radii: verdict.transport.map((row) => row.radius),
+        scales: verdict.transport.map((row) =>
+          Number((1 - row.moment).toPrecision(6)),
+        ),
+      }) +
+      ',',
+    '  /** µm (half the effective diameter, as the phase atlas reads an ice row) and 1 − χ′₁ of each ice row. */',
+    '  iceTransport: ' +
+      JSON.stringify({
+        radii: verdict.ice.map((row) => row.radius),
+        scales: verdict.ice.map((row) =>
+          Number((1 - row.moment).toPrecision(6)),
+        ),
+      }) +
+      ',',
+    '  /** The reconstruction’s worst relative error against the oracle, on the domain. */',
+    `  reconstructionError: ${four(judged.error)},`,
+    `  reconstruction: ${reconstructionText(judged)},`,
+    ...outsideFields(verdict.outside),
+    '  /** Half floats in `slabSourceTexels.generated.ts`: nodes × nodes × (2·cosines.length·suns) × 4. */',
+    `  texelCount: ${bytes / 2},`,
+    '} as const',
+    '',
+  ]
+  return comment(header) + body.join('\n')
+}
+
+/** `slabSourceTexels.generated.ts`'s text, before prettier. */
+export function texelsModuleText(verdict: SourceVerdict): string {
+  const header = [
+    'Generated by `node apps/ingest/src/transport/slabSourceTable.ts write`;',
+    'rerun it rather than editing.',
+    '',
+    'The texels of `SLAB_VIEW_SOURCE` (`slabSource.generated.ts`, which states',
+    'their layout and read): little-endian half floats in base64. They are',
+    'apart from the table’s constants because they are 1,280,000 characters,',
+    '771 kB gzipped, and a module that reads `nodes` or `cosines` should not',
+    'carry them. The package’s index does not export this module; a page',
+    'reaches it by `import()`, and a test by its path.',
+  ]
+  const body = [
+    'export const SLAB_VIEW_SOURCE_TEXELS = {',
+    "  format: 'inertialref/slab-view-source-texels',",
+    '  version: 1,',
+    '  /** Half floats: what `SLAB_VIEW_SOURCE.texelCount` says. */',
+    `  count: ${loadTable(`source-${verdict.views.name}-views`).length},`,
+    `  texels: '${texelsText(loadTable(`source-${verdict.views.name}-views`))}' as string,`,
+    '} as const',
+    '',
+  ]
+  return comment(header) + body.join('\n')
+}
+
+function write(): void {
+  const verdict = decide()
+  writeFileSync(`${RENDERING}slabSource.generated.ts`, sourceText(verdict))
+  writeFileSync(
+    `${RENDERING}slabSourceTexels.generated.ts`,
+    texelsModuleText(verdict),
+  )
+  saveStage('source-verdict', verdict)
+  console.log(
+    `slabSourceTable: wrote the source under ${RENDERING}; now run pnpm exec prettier -w on both files`,
+  )
+}
+
+if (import.meta.main) {
+  const [stage, ...rest] = process.argv.slice(2)
+  if (stage === 'stage')
+    runStage(rest[0] ?? '', Number(rest[1] ?? 0), Number(rest[2] ?? 1))
+  else if (stage === 'merge') mergeStage(rest[0] ?? '', Number(rest[1]))
+  else if (stage === 'transport')
+    saveStage(
+      'transport',
+      TRANSPORT_RADII.map((radius): TransportRow => {
+        const { share, asymmetry, moment } = slabPopulation(radius)
+        return { radius, share, asymmetry, moment }
+      }),
+    )
+  else if (stage === 'outside') outsideStage(rest[0] ?? '')
+  else if (stage === 'ice') iceStage()
+  else if (stage === 'sample') sampleStage()
+  else if (stage === 'judge') judgeStage(rest[0] ?? '')
+  else if (stage === 'write') write()
+  else {
+    console.error(
+      'slabSourceTable: a stage is one of stage <nodes> <part> <parts>, merge <nodes> <parts>, transport, outside <set>, sample, ice, judge <three | nodes>, write',
+    )
+    process.exit(1)
+  }
+}

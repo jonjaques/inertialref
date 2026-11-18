@@ -56,7 +56,6 @@ const WRITES: Readonly<Record<SceneAttachmentName, () => Node>> = {
       1,
     ).mul(motionOverlay.oneMinus()),
   meterMask: () => vec4(meterOverlay, 0, 0, 1),
-  velocity: () => vec4(nodeObject(velocity) as unknown as Node<'vec2'>, 0, 1),
   reactive: () => vec4(reactiveCoverage, 0, 0, output.a),
 }
 

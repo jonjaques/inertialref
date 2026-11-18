@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import {
   type Camera,
   CustomToneMapping,
+  DoubleSide,
   FloatType,
   LinearSRGBColorSpace,
   Mesh,
@@ -14,7 +15,8 @@ import {
   Sprite,
   SRGBColorSpace,
 } from 'three/webgpu'
-import { positionLocal, vec3 } from 'three/tsl'
+import { context, positionLocal, vec3 } from 'three/tsl'
+import { buildingClouds } from './cloudBuild.ts'
 import { type GpuSession, openGpu } from './gpuHarness.ts'
 import { createStarfieldMaterial, createStarMaterial } from './materials.ts'
 import { DEFAULT_PICTURE } from './picture.ts'
@@ -383,5 +385,103 @@ describe('the spine', () => {
     expect(gpu.pipelinesBuilt() - afterWarmCompile).toBeLessThanOrEqual(1)
 
     target.dispose()
+  })
+
+  it('warms a two-sided transparent mesh against the scene MRT', async () => {
+    const { renderer } = gpu
+    renderer.setRenderTarget(null)
+    const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))
+    const scene = new Scene()
+    const material = new MeshBasicNodeMaterial({
+      side: DoubleSide,
+      transparent: true,
+      depthWrite: false,
+    })
+    material.colorNode = vec3(0.28, 0.63, 0.74)
+    const mesh = new Mesh(new SphereGeometry(0.9, 12, 8), material)
+    scene.add(mesh)
+    const reports = gpu.reported().length
+    const pipelines = gpu.pipelinesBuilt()
+    const previousContext = renderer.contextNode
+    try {
+      // The single pass is a clouds page's (`cloudBuild.ts`): only there
+      // does a sensor install providers in the middle of a compile.
+      buildingClouds(true)
+      const pending = warmCompile(warmRenderer(renderer, layout), {
+        object: mesh,
+        camera,
+        scene,
+      })
+      // A replacement canvas can mount the sensor and install its cloud
+      // providers while the landing effects' compile is still in flight.
+      renderer.contextNode = context({})
+      await pending
+      expect(gpu.pipelinesBuilt()).toBeGreaterThan(pipelines)
+      expect(
+        gpu
+          .reported()
+          .slice(reports)
+          .filter(({ type }) => type === 'error'),
+      ).toEqual([])
+      expect(material.forceSinglePass).toBe(false)
+      expect(material.side).toBe(DoubleSide)
+    } finally {
+      renderer.contextNode = previousContext
+      // The suite's renderer is shared: later tests warm as a page without
+      // clouds does.
+      buildingClouds(false)
+      mesh.geometry.dispose()
+      material.dispose()
+    }
+  })
+
+  it('draws a two-sided transparent mesh with the faces its warm-up compiled', async () => {
+    const { renderer } = gpu
+    installToneCurve(renderer, 1)
+    renderer.outputColorSpace = SRGBColorSpace
+    const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))
+    /*
+     * A transparent two-sided mesh draws as two passes, its back face then
+     * its front, each a pipeline of its own. No warm-up through this seam
+     * reaches them yet: one call queuing both faces, one single-pass call,
+     * and one call per face each leave the frame building both, the same
+     * count on `main`. This holds the warm-up to that measured count, so it
+     * gets no worse, and is the test that tightens when the faces are
+     * reached.
+     */
+    const scene = new Scene()
+    const material = new MeshBasicNodeMaterial({
+      side: DoubleSide,
+      transparent: true,
+      depthWrite: false,
+    })
+    material.colorNode = vec3(0.61, 0.37, 0.83)
+    const mesh = new Mesh(new SphereGeometry(0.9, 12, 8), material)
+    scene.add(mesh)
+    scene.updateMatrixWorld(true)
+    const target = floatTarget()
+    try {
+      await warmCompile(warmRenderer(renderer, layout), {
+        object: mesh,
+        camera,
+        scene,
+      })
+      const afterWarmCompile = gpu.pipelinesBuilt()
+      const sensor = createSensor(renderer, scene, camera, layout)
+      sensor.render(target)
+      await gpu.read(target)
+      sensor.dispose()
+      // The two faces the warm-up does not reach, and the chain's quad.
+      const UNREACHED_FACES = 2
+      expect(gpu.pipelinesBuilt() - afterWarmCompile).toBeLessThanOrEqual(
+        UNREACHED_FACES + 1,
+      )
+      expect(material.side).toBe(DoubleSide)
+      expect(material.forceSinglePass).toBe(false)
+    } finally {
+      target.dispose()
+      mesh.geometry.dispose()
+      material.dispose()
+    }
   })
 })

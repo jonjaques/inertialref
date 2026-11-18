@@ -948,8 +948,10 @@ pixels.
 
 The scene pass renders at that smaller size. `render/upscale.ts` dispatches the
 library kernels once per render call and returns display-size radiance before
-defocus, shutter motion, glare, noise and output encoding. Temporal input adds
-unjittered velocity and a reactive attachment. The sensor clears projection
+defocus, shutter motion, glare, noise and output encoding. Temporal input reads
+the optics' `motion` attachment, whose first two channels are the velocity FSR
+takes, masked under overlays and drawn against the unjittered projection, and
+adds a reactive attachment alone. The sensor clears projection
 jitter in `finally`; resize, declared camera cuts and incompatible processing
 changes discard history. Its existing exposure owner supplies FSR's
 conditioning, with unity for Enhanced's composed visibility domain.

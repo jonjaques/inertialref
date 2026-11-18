@@ -63,6 +63,8 @@ import {
 import { airLuminance, observerAir, skyOverhead } from '../render/radiance.ts'
 import { texturesFor } from '../render/planetTextures.ts'
 import { proceduralRingStrip } from '../render/proceduralRings.ts'
+import { markOverClouds } from '../render/cloudLayers.ts'
+import { deckYields } from '../render/cloudLevers.ts'
 import { shapeGeometryFor } from '../render/shapeModels.ts'
 import { createBodyResidency } from './bodyResidency.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
@@ -317,6 +319,13 @@ export function Bodies({
     const visibility = engine.visibilityProcessing
     if (scene === null || container === null) return
     residency.begin()
+    // Under `?clouds=1` alone: without it no lever is read and no deck moves.
+    const clouds = engine.cloudsAvailable ? engine.clouds : null
+    // The served body alone: the report beside it is built whole at each read.
+    const served =
+      clouds?.on === true
+        ? (engine.sensorDiagnostics?.cloudsServed ?? null)
+        : null
 
     const geometryFor = (angle: number): SphereGeometry =>
       (
@@ -357,9 +366,13 @@ export function Bodies({
       let ringMesh: Mesh | null = null
       let ringMaterial: RingMaterial | null = null
       if (ringed) {
-        ringMaterial = createRingMaterial()
+        // Seen through the clouds in front of it under `?clouds=1`; the
+        // phase-0 graph without, which is every page with no handle.
+        ringMaterial = createRingMaterial(engine.cloudFront ?? undefined)
         ringMesh = new Mesh(rings, ringMaterial.material)
         ringMesh.renderOrder = 2
+        // World transparency over the clouds, in pass B.
+        if (engine.cloudsAvailable) markOverClouds(ringMesh)
         container.add(ringMesh)
       }
 
@@ -522,7 +535,16 @@ export function Bodies({
         }
         setNumber(planet.specularStrength, values.specularStrength)
         setNumber(planet.nightStrength, values.nightStrength)
-        setNumber(planet.cloudShadow, values.cloudShadow)
+        // A deck the volume hides still darkens the sphere through its map,
+        // and under the volume's clouds that is a second set of shadows of
+        // clouds nobody can see. Its shadow yields with it: a uniform's
+        // value, so no graph moves.
+        setNumber(
+          planet.cloudShadow,
+          clouds !== null && deckYields(clouds, served, body.address)
+            ? 0
+            : values.cloudShadow,
+        )
         setNumber(planet.cloudHeight, values.cloudHeight)
         setNumber(planet.ringInner, values.ringInner)
         setNumber(planet.ringOuter, values.ringOuter)
@@ -532,7 +554,10 @@ export function Bodies({
       /* --- the cloud deck ------------------------------------------------- */
       if (visual.clouds !== null && visual.cloudMaterial !== null) {
         const values = uniforms.clouds
-        visual.clouds.visible = values !== null
+        // A traced body shows no deck: the clouds are its weather now.
+        visual.clouds.visible =
+          values !== null &&
+          (clouds === null || !deckYields(clouds, served, body.address))
         if (values !== null) {
           visual.clouds.position.copy(visual.mesh.position)
           visual.clouds.quaternion.copy(quaternion)
@@ -570,6 +595,7 @@ export function Bodies({
           setNumber(material.bodyRadius, values.bodyRadius)
           setNumber(material.opticalDepth, values.opticalDepth)
           setColor(material.baseColor, values.baseColor)
+          setNumber(material.compression, body.placement.compression)
         }
       }
 

@@ -175,6 +175,17 @@ export interface GpuSession {
    */
   pipelinesBuilt(): number
   /**
+   * Compute pipelines built at the device since the session opened, on a
+   * counter of their own.
+   *
+   * Three builds a kernel's pipeline synchronously at its first dispatch, so a
+   * census of render pipelines alone passes with every kernel compiling in the
+   * first frame. Apart from `pipelinesBuilt` because the sensor's own meter
+   * compiles its kernels in the sensor's first frame, and every assertion
+   * already written against the render count stays true.
+   */
+  computePipelinesBuilt(): number
+  /**
    * Hold the next render pipeline the device is asked to build asynchronously.
    *
    * `compileAsync` registers a pipeline in the backend's cache when it asks
@@ -419,6 +430,17 @@ export async function openGpu(
     hold = null
     requested()
     return built.then((pipeline) => released.then(() => pipeline))
+  }
+  let computePipelines = 0
+  const createComputeSync = device.createComputePipeline.bind(device)
+  const createComputeAsync = device.createComputePipelineAsync.bind(device)
+  device.createComputePipeline = (descriptor) => {
+    computePipelines += 1
+    return createComputeSync(descriptor)
+  }
+  device.createComputePipelineAsync = (descriptor) => {
+    computePipelines += 1
+    return createComputeAsync(descriptor)
   }
 
   /*
@@ -707,6 +729,10 @@ export async function openGpu(
 
     pipelinesBuilt() {
       return pipelines
+    },
+
+    computePipelinesBuilt() {
+      return computePipelines
     },
 
     holdNextPipeline() {

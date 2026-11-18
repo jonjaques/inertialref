@@ -1,9 +1,12 @@
 import { getLogger, getTimer } from '@inertialref/shared'
 import {
   ColorManagement,
+  DoubleSide,
   NoToneMapping,
   type Scene,
   type Camera,
+  type ComputeNode,
+  type Material,
   type NodeMaterial,
   type Object3D,
   type QuadMesh,
@@ -13,7 +16,9 @@ import {
   type WebGPURenderer,
 } from 'three/webgpu'
 import { BOOT_PHASE } from '../engine/frameTiming.ts'
+import { runQuadPasses } from './quadPass.ts'
 import type { SceneLayout } from './sceneLayout.ts'
+import { buildsClouds } from './cloudBuild.ts'
 import { warmTargetFor } from './sceneTarget.ts'
 import { sensorMrt } from './sensorMrt.ts'
 
@@ -166,6 +171,14 @@ function bindWarmTarget(
  * still building goes to the canvas. Visibility is honored the way the walk
  * honors it — an invisible subtree compiles nothing — and `warmCompile` has
  * made the root visible before this runs.
+ *
+ * **On a page with clouds, a two-sided transparent mesh compiles as one
+ * draw.** `compileAsync` queues its two faces as two draws, so the front face
+ * also sets up after the yield, and the sensor installs the cloud providers
+ * in that window. The front face then builds against another shader key, a
+ * single-output program for an MRT pipeline, which WebGPU rejects and the
+ * renderer does not survive. The live draw keeps both faces, and a page
+ * without clouds queues both, as it always has (`cloudBuild.ts`).
  */
 export const warmRenderer = (gl: object, layout: SceneLayout): WarmRenderer => {
   const renderer = gl as WebGPURenderer
@@ -178,7 +191,7 @@ export const warmRenderer = (gl: object, layout: SceneLayout): WarmRenderer => {
         renderer.setMRT(sensorMrt(layout))
         object.traverseVisible((node) => {
           if (isRenderable(node))
-            compiles.push(renderer.compileAsync(node, camera, scene))
+            compiles.push(compileRenderable(renderer, node, camera, scene))
         })
       } finally {
         // A throw in the walk otherwise leaves every later frame bound to a
@@ -192,8 +205,37 @@ export const warmRenderer = (gl: object, layout: SceneLayout): WarmRenderer => {
 }
 
 /** What the render list would draw: an object that carries a material. */
-const isRenderable = (node: Object3D): boolean =>
-  (node as { material?: unknown }).material !== undefined
+const isRenderable = (
+  node: Object3D,
+): node is Object3D & { material: Material | Material[] } =>
+  (node as { material?: Material | Material[] }).material !== undefined
+
+function compileRenderable(
+  renderer: WebGPURenderer,
+  node: Object3D & { material: Material | Material[] },
+  camera: Camera,
+  scene: Scene | null,
+): Promise<unknown> {
+  // A page without clouds compiles as it always has, both faces queued.
+  if (!buildsClouds()) return renderer.compileAsync(node, camera, scene)
+  const materials = Array.isArray(node.material)
+    ? node.material
+    : [node.material]
+  const twoSided = materials.filter(
+    (material) =>
+      material.transparent &&
+      material.side === DoubleSide &&
+      !material.forceSinglePass,
+  )
+  for (const material of twoSided) material.forceSinglePass = true
+  try {
+    return renderer.compileAsync(node, camera, scene)
+  } finally {
+    // Three reads forceSinglePass during the synchronous walk. Restore it
+    // before a live frame can draw and before the queued pipeline is built.
+    for (const material of twoSided) material.forceSinglePass = false
+  }
+}
 
 /**
  * Compile one object's pipelines now, so no frame has to.
@@ -612,6 +654,71 @@ export function warmSensorPass(
     renderer.outputColorSpace = color
   }
   return Promise.all(compiles).then(() => undefined)
+}
+
+/**
+ * Build a quad pass's pipeline by drawing it once into its own target: the
+ * recipe for a target of fewer than four channels, which `warmSensorPass`
+ * cannot serve.
+ *
+ * `compileAsync` builds a program after an `await` (`getForRenderAsync`),
+ * by when the warm-up has put its target back, and the node builder takes
+ * a fragment's output type from the target bound then: `vec4` with none,
+ * where an R16F target's draw writes an `f32` and an RG8 one's a `vec2`. The
+ * program differs, so the pipeline does, and the first frame builds the one
+ * the warm-up owed — measured on the clouds' R16F depth copy, RG8 volume and
+ * R16F sun grid, where every four-channel bake built none. A draw binds the
+ * target for the whole of its build, which is synchronous: the stall at
+ * boot that the census exists to take there. Each pass draws its target's
+ * first slice, which whatever owns the target redraws before it reads.
+ */
+export function warmByDrawing(
+  renderer: WebGPURenderer,
+  quad: QuadMesh,
+  label: string,
+  passes: readonly WarmPass[],
+): void {
+  const material = quad.material
+  try {
+    runQuadPasses(renderer, quad, { linear: true }, (draw) => {
+      for (const pass of passes) draw(label, pass.target, pass.material)
+    })
+  } finally {
+    quad.material = material
+  }
+}
+
+/**
+ * Build compute pipelines ahead of their first frame.
+ *
+ * r185 has no compute compile-ahead: `compute()` builds a kernel's pipeline
+ * synchronously at its first dispatch (`createComputePipeline`), which is a
+ * main-thread stall inside whatever frame first selects it. This is that
+ * dispatch, at boot, with no workgroups: three builds the pipeline and its
+ * bindings before it looks at the dispatch size, and a dispatch of nothing
+ * runs nothing, so a warm-up neither depends on each kernel's own bounds
+ * guard nor writes into a 1 × 1 stand-in. One kernel a macrotask, because
+ * each build blocks. Failures are logged and swallowed, as `warmCompile`'s
+ * are: a kernel that will not build resurfaces at its first dispatch.
+ * `computeAsync` and not `compute`: on a renderer still initializing,
+ * `compute` hands back an unawaited `computeAsync` whose rejection the catch
+ * never sees; on an initialized one the two are the same synchronous build.
+ */
+export async function warmCompute(
+  renderer: WebGPURenderer,
+  kernels: readonly ComputeNode[],
+): Promise<void> {
+  for (const kernel of kernels) {
+    try {
+      await renderer.computeAsync(kernel, [0, 1, 1])
+    } catch (cause) {
+      log.warn('a compute warm-up failed', {
+        kernel: kernel.name,
+        cause: String(cause),
+      })
+    }
+    await breathe()
+  }
 }
 
 /** The no-op every ticket verb becomes once there is no boot to report to. */

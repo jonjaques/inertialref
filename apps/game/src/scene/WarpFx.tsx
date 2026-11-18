@@ -4,6 +4,7 @@ import type { PerspectiveCamera, Scene } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createWarpEffects } from '../render/warpEffects.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import { markOverClouds } from '../render/cloudLayers.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /**
@@ -16,10 +17,12 @@ export function WarpFx({ engine }: { engine: GameEngine }) {
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
   // Same memo-without-dispose shape as SunFlare, same StrictMode reason.
-  const fx = useMemo(
-    () => createWarpEffects(() => engine.hull?.lengthMeters ?? 6),
-    [engine],
-  )
+  // Over the clouds under `?clouds=1`, marked before its warm-up compiles it.
+  const fx = useMemo(() => {
+    const made = createWarpEffects(() => engine.hull?.lengthMeters ?? 6)
+    if (engine.cloudsAvailable) markOverClouds(made.group)
+    return made
+  }, [engine])
 
   /*
    * Compile these exact materials now, behind the boot overlay, not on the

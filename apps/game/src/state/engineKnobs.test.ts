@@ -11,6 +11,7 @@ import { bindEngineKnobs, type EngineKnobs } from './engineKnobs.ts'
 import {
   CAMERA_LENS,
   read,
+  RENDER_CLOUDS,
   RENDER_PICTURE,
   RENDER_SENSOR,
   RENDER_LENS_FLARE,
@@ -30,6 +31,7 @@ import {
 
 const KNOBS = [
   CAMERA_LENS,
+  RENDER_CLOUDS,
   RENDER_GAMMA,
   RENDER_LENS_FLARE,
   RENDER_SURFACE,
@@ -44,6 +46,7 @@ function engine(): EngineKnobs {
     lensFlare: true,
     gamma: 1,
     surfaceQuality: DEFAULT_SURFACE_QUALITY,
+    cloudsByDefault: false,
     supersample: 1,
     picture: DEFAULT_PICTURE,
     onLensRequest: null,
@@ -70,6 +73,25 @@ describe('the engine knobs', () => {
     release()
     write(RENDER_SENSOR, DEFAULT_SENSOR_SETTINGS)
     expect(bound.sensorSettings).toEqual(settings)
+  })
+
+  it('carries the clouds setting, except on a page a link built the clouds for', () => {
+    write(RENDER_CLOUDS, true)
+    const bound = engine()
+    const release = bindEngineKnobs(bound)
+    expect(bound.cloudsByDefault).toBe(true)
+    write(RENDER_CLOUDS, false)
+    expect(bound.cloudsByDefault).toBe(false)
+    release()
+    // `?clouds=` built this page for a script: the stored setting is not its.
+    write(RENDER_CLOUDS, true)
+    const linked = engine()
+    const unbind = bindEngineKnobs(linked, null, true)
+    expect(linked.cloudsByDefault).toBe(false)
+    write(RENDER_CLOUDS, false)
+    write(RENDER_CLOUDS, true)
+    expect(linked.cloudsByDefault).toBe(false)
+    unbind()
   })
 
   it('applies what is stored on the way in', () => {

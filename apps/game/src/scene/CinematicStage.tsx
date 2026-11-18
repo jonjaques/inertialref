@@ -4,13 +4,24 @@ import type { Scene } from 'three/webgpu'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { createLandingEffects } from '../render/cinematicStage.ts'
 import { warmAtMount, warmCompile, warmRenderer } from '../render/warmup.ts'
+import { markOverClouds } from '../render/cloudLayers.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 export function CinematicStage({ engine }: { engine: GameEngine }) {
   const camera = useThree((state) => state.camera)
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
-  const effects = useMemo(() => createLandingEffects(), [])
+  /*
+   * Under `?clouds=1` the sheath and the pad dust draw over the clouds and
+   * the staged sky under them: it stands in for the air the clouds are in.
+   */
+  const effects = useMemo(() => {
+    const made = createLandingEffects()
+    if (engine.cloudsAvailable)
+      for (const child of made.group.children)
+        if (child !== made.sky) markOverClouds(child)
+    return made
+  }, [engine])
 
   useEffect(() => {
     warmAtMount({

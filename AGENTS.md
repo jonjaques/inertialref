@@ -120,6 +120,7 @@ any rule governing the files being changed.
 - **Never widen the soundtrack's license set.** [Details](docs/agents/invariants.md#rule-66).
 - **Never bundle the soundtrack.** [Details](docs/agents/invariants.md#rule-67).
 - **Never start GPU work that does not hold the machine's GPU lock.** [Details](docs/agents/invariants.md#rule-68).
+- **Never draw an object over the clouds without marking it for the OVER layer.** [Details](docs/agents/invariants.md#rule-69).
 
 ## Finish the work
 

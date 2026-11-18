@@ -1,8 +1,10 @@
 import { DEFAULT_SENSOR_SETTINGS, LENS_PRESETS } from '@inertialref/rendering'
 import { sensorRadiance } from './radiance.ts'
 import type { SensorFrame } from './sensor.ts'
-import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
+import { Upscaler } from '@pmndrs/upscaler'
 import {
+  AdditiveBlending,
   FloatType,
   LinearSRGBColorSpace,
   Mesh,
@@ -395,8 +397,10 @@ describe('the upscaler on the physical GPU', () => {
             0.015,
           )
         expect(pixel[3]).toBe(1)
+        // Radiance, the optics' motion and mask, and under a temporal
+        // picture reactivity alone: reconstruction reads `motion`.
         expect(f.sensor.sceneTarget.textures).toHaveLength(
-          picture.aa === 'temporal' ? 5 : 3,
+          picture.aa === 'temporal' ? 4 : 3,
         )
       } finally {
         f.dispose()
@@ -439,7 +443,8 @@ describe('the upscaler on the physical GPU', () => {
     }
   })
 
-  it('keeps rigid velocity at zero across a render-origin rebase', async () => {
+  it('keeps rigid motion at zero across a render-origin rebase', async () => {
+    // `motion.rg` is what reconstruction reads as its velocity.
     const f = await rig(temporal)
     try {
       f.sensor.render(f.target)
@@ -453,7 +458,7 @@ describe('the upscaler on the physical GPU', () => {
       f.sensor.render(f.target)
       await gpu.read(f.target)
       const attachment = f.sensor.sceneTarget.textures.find(
-        (one) => one.name === 'velocity',
+        (one) => one.name === 'motion',
       )!
       const pixels = await gpu.drawGraph(vec4(texture(attachment).rg, 0, 1), {
         float: true,
@@ -479,7 +484,7 @@ describe('the upscaler on the physical GPU', () => {
       moving.sensor.render(moving.target)
       await gpu.read(moving.target)
       const attachment = moving.sensor.sceneTarget.textures.find(
-        (one) => one.name === 'velocity',
+        (one) => one.name === 'motion',
       )!
       const pixels = await gpu.drawGraph(vec4(texture(attachment).rg, 0, 1), {
         float: true,
@@ -487,6 +492,77 @@ describe('the upscaler on the physical GPU', () => {
       expect(Math.abs(pixels.at(32, 32)[0])).toBeGreaterThan(0.1)
     } finally {
       moving.dispose()
+    }
+  })
+
+  it('hands reconstruction the surface’s motion under an overlay', async () => {
+    /*
+     * A flare, a plume or a warp streak is light without a surface, and the
+     * vectors FSR reprojects, dilates and locks from must be what it covers:
+     * the overlay's own, written over its footprint, move every neighbor the
+     * dilation reaches by a motion nothing on screen has. Reactivity does not
+     * repair it — it suppresses history only where the overlay drew.
+     *
+     * A 40 × 40 surface 4 m out and a 0.5 × 0.5 overlay 2 m out that travels
+     * with the eye, so its own screen motion is zero, and a 0.25 m pan. The
+     * surface moves −0.25 / (4 · tan 30°) = −0.108 of clip space, at the bare
+     * edge and under the overlay alike. What is read is the texture the kernel
+     * is handed, whatever the layout calls it.
+     */
+    const dispatch = vi.spyOn(Upscaler.prototype, 'dispatch')
+    const f = await rig(temporal)
+    const overlay = new Mesh(
+      new PlaneGeometry(0.5, 0.5),
+      sensorRadiance(new MeshBasicNodeMaterial(), true),
+    )
+    overlay.material.colorNode = vec3(4, 3, 2)
+    overlay.material.transparent = true
+    overlay.material.depthWrite = false
+    overlay.material.blending = AdditiveBlending
+    try {
+      f.slab.position.z = -4
+      f.slab.scale.setScalar(0.4)
+      overlay.position.z = -2
+      f.scene.add(overlay)
+      // The headless renderer has no rAF to advance three's velocity history.
+      const frames = (
+        gpu.renderer as unknown as {
+          _nodes: { nodeFrame: { frameId: number } }
+        }
+      )._nodes.nodeFrame
+      const draw = async (x: number) => {
+        f.camera.position.x = x
+        overlay.position.x = x
+        f.camera.updateMatrixWorld(true)
+        f.scene.updateMatrixWorld(true)
+        frames.frameId++
+        f.sensor.render(f.target)
+        await gpu.read(f.target)
+      }
+      await draw(0)
+      await draw(0.25)
+      const handed = dispatch.mock.lastCall?.[0].velocity
+      expect(handed).toBeDefined()
+      const pixels = await gpu.drawGraph(vec4(texture(handed!).rg, 0, 1), {
+        float: true,
+      })
+      const pan = -0.25 / (4 * Math.tan(Math.PI / 6))
+      // Two half-float steps of the value, and the bilinear read of a field
+      // that is constant here.
+      const half = 2 * 2 ** -10 * Math.abs(pan)
+      for (const [label, x] of [
+        ['bare edge', 4],
+        ['under the overlay', SIZE / 2],
+      ] as const) {
+        const [mx, my] = pixels.at(x, SIZE / 2)
+        expect(Math.abs(mx! - pan), `${label}: ${mx}`).toBeLessThanOrEqual(half)
+        expect(Math.abs(my!), `${label}: ${my}`).toBeLessThanOrEqual(half)
+      }
+    } finally {
+      dispatch.mockRestore()
+      overlay.geometry.dispose()
+      overlay.material.dispose()
+      f.dispose()
     }
   })
 

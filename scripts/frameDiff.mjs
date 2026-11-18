@@ -53,8 +53,13 @@ async function magick(args) {
   }
 }
 
-/** Pixels that differ between two frames, at the comparison size. */
-const changedPixels = async (a, b) =>
+/**
+ * Pixels that differ between two frames, at the comparison size. Exported for
+ * `castSteps.mjs` and `weather/classify.mjs`, which count a moving camera's
+ * pairs and a settled still's by this arithmetic, so a cast's count and its
+ * still's are the same measure.
+ */
+export const changedPixels = async (a, b) =>
   Number(
     await magick([
       a,

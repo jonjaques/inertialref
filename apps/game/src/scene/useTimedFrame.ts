@@ -1,6 +1,6 @@
 import { type RootState, useFrame } from '@react-three/fiber'
 import { getTimer } from '@inertialref/shared'
-import { framesHeld } from '../engine/frameHold.ts'
+import { frameDelta } from '../engine/frameHold.ts'
 import { RENDER_PHASE } from '../engine/frameTiming.ts'
 import { runGraphicsFrame } from '../runtimeFailure.ts'
 
@@ -32,13 +32,16 @@ export function useTimedFrame(
   priority = 0,
 ): void {
   useFrame((state, delta) => {
-    if (framesHeld()) return
+    // Null on a held frame; on a frame after one the page's pace skipped, the
+    // skipped time is in it, so an animation keeps the world's pace.
+    const step = frameDelta(delta)
+    if (step === null) return
     if (!timer.on) {
-      runGraphicsFrame(() => callback(state, delta))
+      runGraphicsFrame(() => callback(state, step))
       return
     }
     const started = performance.now()
-    runGraphicsFrame(() => callback(state, delta))
+    runGraphicsFrame(() => callback(state, step))
     timer.measure(name, started, performance.now(), RENDER_PHASE)
   }, priority)
 }

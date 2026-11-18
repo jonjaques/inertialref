@@ -10,6 +10,7 @@ import { Vector3 } from 'three/webgpu'
 import { nearFieldLighting, verticalFovDegrees } from '@inertialref/rendering'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import { integratedGainFor } from '../render/radiance.ts'
+import { ALL_LAYERS, OVER_CLOUDS_LAYER } from '../render/cloudLayers.ts'
 import { useTimedFrame } from './useTimedFrame.ts'
 
 /** Reused per frame; a light direction is not worth an allocation at 144 Hz. */
@@ -56,6 +57,9 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
   const light = useRef<PointLight>(null)
   const ambient = useRef<AmbientLight>(null)
   const fill = useRef<DirectionalLight>(null)
+  // Under `?clouds=1` alone, set where each light is made, before any warm-up
+  // compiles against it (`cloudLayers.ts` says why every layer).
+  const layers = engine.cloudsAvailable ? { layers: ALL_LAYERS } : {}
 
   const updateCamera = () => {
     const scene = engine.scene()
@@ -149,6 +153,9 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
       pose.orientation.w,
     )
     camera.position.set(pose.position.x, pose.position.y, pose.position.z)
+    // `onCreated` marks the camera R3F first hands over; one it builds later
+    // would draw no overlay at all on a frame that splits the scene.
+    if (engine.cloudsAvailable) camera.layers.enable(OVER_CLOUDS_LAYER)
     camera.updateMatrixWorld()
 
     // Sunlight comes from the nearest star's rendered position, so shadows and
@@ -207,14 +214,25 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
 
   return (
     <>
-      <ambientLight ref={ambient} intensity={0} />
+      <ambientLight ref={ambient} intensity={0} {...layers} />
       {/* decay 0: the star is tens of millions of render-meters away after
           compression, so physical falloff would make it useless as a light. */}
-      <pointLight ref={light} intensity={0} distance={0} decay={0} />
+      <pointLight
+        ref={light}
+        intensity={0}
+        distance={0}
+        decay={0}
+        {...layers}
+      />
       {/* Aimed every frame above; the initial direction only has to be
           non-degenerate, because `DirectionalLight` normalizes nothing and a
           zero vector renders as a light pointing everywhere and nowhere. */}
-      <directionalLight ref={fill} position={[0, 0, 1]} intensity={0} />
+      <directionalLight
+        ref={fill}
+        position={[0, 0, 1]}
+        intensity={0}
+        {...layers}
+      />
     </>
   )
 }

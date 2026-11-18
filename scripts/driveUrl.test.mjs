@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { execFileSync, spawnSync } from 'node:child_process'
-import { PICTURES, encodePictures } from '../packages/devtools/src/index.ts'
+import {
+  CORNERSTONES,
+  PICTURES,
+  encodePictures,
+} from '../packages/devtools/src/index.ts'
 import { readPictureLink } from '../apps/game/src/planetarium/presetUrl.ts'
 import { driveUrl } from './driveUrl.mjs'
 
@@ -94,6 +98,17 @@ describe('driver view URLs', () => {
     expect(url.searchParams.get('presentation')).toBe('occluded')
     expect(readPictureLink(url.searchParams).picture?.id).toBe('earthrise')
   })
+  it.each(CORNERSTONES.map((one) => [one.id, one]))(
+    'carries the cornerstone %s whole through its link, weather and all',
+    (_id, cornerstone) => {
+      const url = new URL(
+        driveUrl({ preset: cornerstone.id, query: ['clouds=1'] }),
+      )
+      expect(url.searchParams.get('shot')).toBe('3')
+      expect(url.searchParams.get('clouds')).toBe('1')
+      expect(readPictureLink(url.searchParams).picture).toEqual(cornerstone)
+    },
+  )
   it('opens an exported shot and applies raw-text query overrides in order', () => {
     const picture = PICTURES.find((one) => one.framing.kind === 'camera')
     const url = new URL(

@@ -295,6 +295,23 @@ export const RENDER_LENS_FLARE = define({
 })
 
 /**
+ * Volumetric clouds: takram's renderer through its WebGPU port
+ * (`render/clouds.ts`), drawn on the bodies the clouds serve unasked.
+ *
+ * Off by default. The cloud chunk is chosen when the renderer is built, so
+ * the canvas is built again when this changes, as it is for the output range.
+ * A page link's `?clouds=` outranks it for that page and writes nothing back.
+ * On a WebGL renderer the system is not built and the switch draws nothing.
+ */
+export const RENDER_CLOUDS = define({
+  key: 'render.clouds',
+  group: 'display',
+  what: 'volumetric clouds',
+  initial: false,
+  accept: isBoolean,
+})
+
+/**
  * Display gamma: a power on the displayed picture's range up to white, 1 as
  * the curve is authored, over 1 lifting the midtones and under 1 sinking
  * them — the output is the input to 1/gamma (`render/tonemap.ts`). A
@@ -860,6 +877,7 @@ export const REGISTRY: readonly AnyPreference[] = [
   RENDER_SENSOR,
   RENDER_PICTURE,
   RENDER_LENS_FLARE,
+  RENDER_CLOUDS,
   RENDER_GAMMA,
   RENDER_SURFACE,
   RENDER_SHIP,

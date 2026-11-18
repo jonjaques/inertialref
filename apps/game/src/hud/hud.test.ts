@@ -332,8 +332,13 @@ describe('the author’s instruments', () => {
     expect(variation).toContain(
       'Uneven valve timing and tiny settling puffs. Visual only.',
     )
-    // Lens flare and thruster variation are off; rocks are on.
-    expect(graphics.match(/role="switch"/g)).toHaveLength(3)
+    // Lens flare, the clouds and thruster variation are off; rocks are on.
+    expect(graphics).toContain('Volumetric clouds')
+    const clouds = graphics
+      .split('<label')
+      .find((row) => row.includes('Volumetric clouds'))
+    expect(clouds).toContain('role="switch" aria-checked="false"')
+    expect(graphics.match(/role="switch"/g)).toHaveLength(4)
     expect(graphics).toMatch(/role="switch" aria-checked="false"/)
     expect(graphics).toMatch(/role="switch" aria-checked="true"/)
     // Ship, output and surface choices stay visible as radio groups.

@@ -3,7 +3,7 @@
  * `pnpm check` — every check the repository makes, as one graph.
  *
  *     pnpm check                       the whole gate, in parallel
- *     pnpm check --only gate           what the Stop hook runs: graph, knip, fta, lint, typecheck, test
+ *     pnpm check --only gate           what the Stop hook runs: graph, chunks, knip, fta, lint, typecheck, test
  *     pnpm check --only typecheck      the six type projects — what `pnpm typecheck` is
  *     pnpm check --skip slow,bundle    everything but the named stages
  *     pnpm check --force               ignore the stamps and run everything
@@ -106,6 +106,17 @@ const STAGES = [
     weight: 1,
     cost: 0.4,
     timeout: 60_000,
+  },
+  {
+    // Vite builds `App.tsx` in memory, as Astro builds it, and reads its
+    // static chunks. The site itself is held by `check-site-chunks.mjs`, which
+    // the game's build runs in the `bundle` stage.
+    name: 'chunks',
+    why: "App's static chunks holding the cloud system",
+    argv: ['pnpm', 'chunks'],
+    weight: 1,
+    cost: 1.5,
+    timeout: 120_000,
   },
   {
     name: 'knip',
@@ -261,6 +272,7 @@ const GROUPS = {
   typecheck: STAGES.filter((s) => s.group === 'typecheck').map((s) => s.name),
   gate: [
     'graph',
+    'chunks',
     'knip',
     'fta',
     'lint',
