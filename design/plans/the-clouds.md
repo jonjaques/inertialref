@@ -35,10 +35,13 @@ marked as one.
 
 ## 1. What draws today
 
-- **Two renderers stand behind one flag.** `?clouds=1` builds the native march
-  and `?clouds=takram` builds the port, in the same slot of the frame, under
-  the same `engine.clouds` levers. A page holds one or the other. Without the
-  flag neither chunk loads, and nothing draws on `main`.
+- **Two renderers stand behind one flag, and the port behind a setting.**
+  `?clouds=1` builds the native march and `?clouds=takram` builds the port,
+  in the same slot of the frame, under the same `engine.clouds` levers. A
+  page holds one or the other. The display settings' "Volumetric clouds",
+  `render.clouds`, off by default, builds the port at `high`, its own preset, and
+  turns the volume on; a link's flag outranks it for its page. Without the
+  flag or the setting neither chunk loads and nothing draws.
 - **The adapter is four modules and no shader.** `render/clouds.ts` builds the
   port's pass and takram's atmosphere and draws the port's resolved layer as
   the first opaque of the scene pass over the clouds. `render/cloudsFrame.ts`
@@ -254,7 +257,7 @@ estimated at 600 lines and is the largest item here.
 
 ### 5.5 Settings, presets and the frame budget
 
-**The defect.** The presets are reachable only from the console, and the one
+**The defect.** The setting is a switch: on, the port draws at `high`. The five presets are reachable only from the console, and the one
 that looks right, `high`, costs more than the whole frame beside it.
 
 **The route is ours.** The five presets become the cloud row of the picture's

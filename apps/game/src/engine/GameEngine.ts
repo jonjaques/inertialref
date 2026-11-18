@@ -575,6 +575,20 @@ export class GameEngine {
   readonly pictureWeather = new PictureWeatherHold()
 
   /**
+   * Whether the clouds draw unasked: the player's `render.clouds`, bound by
+   * `state/engineKnobs.ts` on a page no `?clouds=` link built. It is the
+   * `on` lever's value outside a picture, and what a picture without weather
+   * keeps (`pictureWeather.ts`).
+   */
+  get cloudsByDefault(): boolean {
+    return this.pictureWeather.byDefault
+  }
+
+  set cloudsByDefault(on: boolean) {
+    this.pictureWeather.setDefault(this, on)
+  }
+
+  /**
    * The player's own lens — what the flight camera is looking through.
    *
    * Bound to the persisted preference by `state/engineKnobs.ts`, exactly as

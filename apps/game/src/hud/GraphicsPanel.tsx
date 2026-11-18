@@ -5,6 +5,7 @@ import {
   TERRAIN_DETAILS,
 } from '../render/quality.ts'
 import {
+  RENDER_CLOUDS,
   RENDER_GAMMA,
   RENDER_PICTURE,
   RENDER_LENS_FLARE,
@@ -66,6 +67,7 @@ export function GraphicsPanel({
   onNotice: (message: string) => void
 }) {
   const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
+  const [clouds, setClouds] = usePersistentState(RENDER_CLOUDS)
   const [gamma, setGamma] = usePersistentState(RENDER_GAMMA)
   const [storedPicture, setPicture] = usePersistentState(RENDER_PICTURE)
   const picture = render.pictureOverride ?? storedPicture
@@ -406,6 +408,30 @@ export function GraphicsPanel({
           changed={changed.flare}
           on={lensFlare}
           onChange={setLensFlare}
+        />
+        {/*
+         * The clouds are chosen when the renderer is built, so a change here
+         * builds the canvas again, as the output range does. A link's
+         * `?clouds=` holds its page; the stored choice waits for the next.
+         */}
+        <SwitchRow
+          divided
+          label="Volumetric clouds"
+          detail={
+            webgl
+              ? 'Needs WebGPU. This renderer is WebGL, so no clouds draw.'
+              : 'Experimental and costly. Weather over worlds with seas; Earth keeps its painted deck. Rebuilds the renderer.'
+          }
+          changed={changed.clouds}
+          on={clouds}
+          disabled={render.cloudsLinked === true}
+          title={
+            render.cloudsLinked === true ? 'Set by the page link' : undefined
+          }
+          onChange={(on) => {
+            setClouds(on)
+            onNotice(`clouds ${on ? 'on' : 'off'} · rebuilding the renderer`)
+          }}
         />
       </Section>
 

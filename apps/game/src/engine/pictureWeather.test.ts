@@ -138,6 +138,25 @@ describe('a picture’s weather as levers', () => {
       })
   })
 
+  it('keeps the volume on over the served set for no weather on a page that draws the clouds unasked', () => {
+    const lit = { ...DEFAULT_CLOUD_LEVERS, on: true, served: EARTH }
+    expect(
+      pictureWeatherLevers(lit, null, { ...page, byDefault: true }),
+    ).toEqual({
+      levers: { ...lit, on: true, served: null },
+      outcome: 'none',
+    })
+    // Weather it cannot draw is still off: a picture never draws a weather
+    // other than the one it names.
+    expect(
+      pictureWeatherLevers(
+        lit,
+        { regime: 'squall-line' },
+        { ...page, byDefault: true },
+      ).levers.on,
+    ).toBe(false)
+  })
+
   it('draws a climate as the lever’s own value: the body’s weather, by no regime’s id', () => {
     const { levers, outcome } = pictureWeatherLevers(
       { ...DEFAULT_CLOUD_LEVERS, weather: 'anvil' },
@@ -332,6 +351,52 @@ describe('the hold', () => {
     hold.release(page)
     hold.frame(page, true)
     expect(hold.outcome).toBe('none')
+  })
+
+  it('turns the volume on and off with the setting while no picture is held, writing only a change', () => {
+    const page = engine()
+    const hold = new PictureWeatherHold()
+    hold.setDefault(page, false)
+    expect(page.writes).toBe(0)
+    hold.setDefault(page, true)
+    expect(page.clouds).toEqual({ ...DEFAULT_CLOUD_LEVERS, on: true })
+    hold.setDefault(page, true)
+    expect(page.writes).toBe(1)
+    hold.setDefault(page, false)
+    expect(page.clouds).toEqual(DEFAULT_CLOUD_LEVERS)
+  })
+
+  it('keeps the clouds on through a picture without weather while the setting is on', () => {
+    const page = engine()
+    const hold = new PictureWeatherHold()
+    hold.setDefault(page, true)
+    hold.apply(page, null, EARTH)
+    expect(page.clouds).toMatchObject({ on: true, served: null })
+    hold.release(page)
+    expect(page.clouds).toEqual({ ...DEFAULT_CLOUD_LEVERS, on: true })
+  })
+
+  it('takes a held picture again under a changed setting, so leaving it puts back the new one', () => {
+    const page = engine()
+    const hold = new PictureWeatherHold()
+    // An ordinary picture, taken with the setting off: the volume off.
+    hold.apply(page, null, decklessAddress)
+    expect(page.clouds.on).toBe(false)
+    hold.setDefault(page, true)
+    expect(page.clouds).toMatchObject({ on: true, served: null })
+    hold.release(page)
+    expect(page.clouds.on).toBe(true)
+    // A picture's own weather survives the change, and the release still
+    // lands on the setting it was changed to.
+    hold.apply(page, { regime: 'overcast' }, EARTH)
+    hold.setDefault(page, false)
+    expect(page.clouds).toMatchObject({
+      on: true,
+      weather: 'overcast',
+      served: EARTH,
+    })
+    hold.release(page)
+    expect(page.clouds).toEqual(DEFAULT_CLOUD_LEVERS)
   })
 
   it('reports weather on a page without the clouds, or on WebGL, unavailable', () => {

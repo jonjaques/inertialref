@@ -63,10 +63,13 @@ const weatherOf = (regime: string): CloudWeather | null =>
  *   and the picture's body forced when it is outside the served set
  *   (`cloudsServed`), which is how Earth, with its authored deck, is drawn
  *   at all. Inside the set no force is needed, and none is written.
- * - Weather it cannot — no `?clouds=1`, no WebGPU, an unknown regime — and
- *   no weather at all: the volume off and nothing forced. A picture never
- *   draws a weather other than the one it names. Phase 2 turns the
- *   no-weather branch to the default set when the default turns on.
+ * - Weather it cannot — no clouds on the page, no WebGPU, an unknown
+ *   regime: the volume off and nothing forced. A picture never draws a
+ *   weather other than the one it names.
+ * - No weather at all: the page's default. Where the player's setting draws
+ *   the clouds unasked (`byDefault`), the volume stays on over the served
+ *   set, the body's climate; elsewhere, a page built by `?clouds=` for a
+ *   script, it is off.
  */
 export function pictureWeatherLevers(
   found: CloudLevers,
@@ -75,10 +78,15 @@ export function pictureWeatherLevers(
     readonly available: boolean
     readonly served: boolean
     readonly address: string
+    readonly byDefault?: boolean
   },
 ): { readonly levers: CloudLevers; readonly outcome: PictureWeatherOutcome } {
   const off: CloudLevers = { ...found, on: false, served: null }
-  if (weather === null) return { levers: off, outcome: 'none' }
+  if (weather === null)
+    return {
+      levers: page.byDefault === true ? { ...off, on: true } : off,
+      outcome: 'none',
+    }
   const drawn = weatherOf(weather.regime)
   if (!page.available || drawn === null)
     return { levers: off, outcome: 'unavailable' }
@@ -148,10 +156,41 @@ export class PictureWeatherHold {
   #pending: string | null = null
   /** The body the picture's clouds are asked to serve, while they are on. */
   #address: string | null = null
+  /** The held picture's weather and body, to take it again under a new default. */
+  #taken: {
+    readonly weather: PictureWeather | null
+    readonly address: string
+  } | null = null
+  /** Whether the page draws the clouds unasked: the player's setting. */
+  #byDefault = false
 
   /** What became of the last picture's weather, while it is held. */
   get outcome(): PictureWeatherOutcome {
     return this.#outcome
+  }
+
+  /** Whether the page draws the clouds unasked. */
+  get byDefault(): boolean {
+    return this.#byDefault
+  }
+
+  /**
+   * The player's setting, as the `on` lever. With no picture held it is
+   * written straight through, and only when it changes, so a page that never
+   * turns the clouds on never writes a lever. With one held it is what the
+   * release puts back, and the picture is taken again under it: leaving a
+   * picture never restores the setting it was taken under.
+   */
+  setDefault(engine: PictureWeatherEngine, on: boolean): void {
+    if (on === this.#byDefault) return
+    this.#byDefault = on
+    if (this.#found === null) {
+      engine.clouds = { ...engine.clouds, on }
+      return
+    }
+    this.#found = { ...this.#found, on }
+    const taken = this.#taken
+    if (taken !== null) this.apply(engine, taken.weather, taken.address)
   }
 
   apply(
@@ -173,8 +212,10 @@ export class PictureWeatherHold {
         (engine.sensorDiagnostics?.clouds?.available ?? true),
       served: body !== null && cloudsServed(body),
       address,
+      byDefault: this.#byDefault,
     })
     engine.clouds = next.levers
+    this.#taken = { weather, address }
     this.#outcome = next.outcome
     this.#subject = undefined
     this.#pending = next.outcome === 'drawn' && body === null ? address : null
@@ -193,6 +234,7 @@ export class PictureWeatherHold {
     if (this.#found === null) return
     engine.clouds = { ...engine.clouds, ...this.#found }
     this.#found = null
+    this.#taken = null
     this.#outcome = 'none'
     this.#early = null
     this.#subject = undefined
