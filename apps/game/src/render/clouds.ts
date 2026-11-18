@@ -36,7 +36,7 @@ import {
   uniform,
   vec4,
 } from 'three/tsl'
-import { AtmosphereContext } from '@takram/three-atmosphere/webgpu'
+import type { AtmosphereContext } from '@takram/three-atmosphere/webgpu'
 import {
   assertWebGPUSupported,
   type BakedCloudTextures,
@@ -62,6 +62,7 @@ import type {
 } from './cloudSystem.ts'
 import { sensorRadiance } from './radiance.ts'
 import { sceneFarDepth } from './sceneDepth.ts'
+import { createCloudsAtmosphere } from './cloudsAtmosphere.ts'
 import { CloudsDepth } from './cloudsDepth.ts'
 import {
   CLOUDS_ANCHOR_REACH,
@@ -268,7 +269,7 @@ function build(
   invariant(sceneMrt !== null, 'the clouds need the scene pass’s MRT')
   assertWebGPUSupported(renderer)
 
-  const atmosphere = new AtmosphereContext()
+  const atmosphere = createCloudsAtmosphere()
   atmosphere.camera = camera
   // The port's own recipe: the lookup, not the raymarch, between eye and cloud.
   atmosphere.raymarchScattering = false

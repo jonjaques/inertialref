@@ -13846,6 +13846,13 @@ during its synchronous compile walk. The live scene still draws both faces.
 The physical GPU regression changes the context midway through one mesh's
 compile and records the same missing-output rejection with the two-draw walk.
 
+A quick off–on–off–on run also reached the port's pending transmittance
+compute with both its context and its renderer disposed, even with the two
+pipelines fixed. The port defers texture disposal until its idle slices finish.
+The adapter ends the iterator before its next dispatch when the chain retires,
+so the port's cleanup still runs. The GPU regression counts four compute
+pipelines after disposal with the original iterator and zero with cancellation.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across
