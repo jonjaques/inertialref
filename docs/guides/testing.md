@@ -387,6 +387,17 @@ shader evidence. Run the same focused command with adapter access before
 changing rendering code; an unavailable or skipped GPU does not count as a
 passing shader check.
 
+Set `IR_WGSL_REPORT` to a fresh file path when a pipeline needs a storage
+inventory. The GPU suite appends one JSON record per measured shader stage
+with the private bytes its entry point can access and the largest function's
+local bytes. The report records any type the sizer cannot resolve. Sizes in
+this report are diagnostic. The camera output's own private-storage test
+still holds its three color encodings to the guaranteed budget.
+
+```sh
+IR_GPU_WAIT=900 IR_WGSL_REPORT=/tmp/inertialref-wgsl.jsonl pnpm test:gpu cameraSensor.gpu
+```
+
 Lifecycle and pixel behavior need different observations. Deferred source
 jobs expose replacement, cancellation and recovery without drawing. A
 recording renderer exposes warm targets, state restoration and disposal.

@@ -154,6 +154,24 @@ no compute terrain, simpler atmosphere, fewer instances, lower LOD ceiling. The
 game must remain playable on it, because "it's a link" is the pitch and a link
 that fails is worse than an install.
 
+Safari, on the desktop and on a phone, holds each pipeline to the WGSL
+guaranteed limits that Chrome on the Mac does not enforce: 8,192 bytes of
+private storage per entry point and 8,192 bytes of locals per function, and
+it refuses a pipeline above either
+([WebKit's enforcement](https://github.com/WebKit/WebKit/blob/main/Source/WebGPU/WGSL/GlobalVariableRewriter.cpp)).
+Every pipeline the default page builds fits, the terrain producer largest at
+2,264 private bytes, and so does takram's renderer behind the volumetric
+clouds setting, at 6,284 in its primary march. The native cloud renderer a
+`?clouds=1` link builds does not: its trace takes up to 17,224 bytes and its
+composite 11,636, so that link ends on the graphics notice in Safari. Mobile
+Safari is not a target the renderer bends for. A change that brings a shader
+under one of WebKit's limits is taken when it is local and leaves the shader
+as easy to extend, and otherwise the feature stays unavailable there. A
+refused pipeline ends on the graphics notice, with Home and Documentation
+open and an explicit retry, and the page does not reload itself.
+`IR_WGSL_REPORT` measures any pipeline the GPU suite builds
+([testing](../guides/testing.md)).
+
 ---
 
 ## Performance budgets
