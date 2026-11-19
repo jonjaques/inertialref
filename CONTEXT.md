@@ -13904,9 +13904,6 @@ level on one of them.
   ordinary preview rather than a separate staging Worker. Optional image
   questions and composition assistance are not implemented.
 
-- **Navigator body distances ignore held photographic time.** Observer-centered
-  survey and fuzzy-search rows need the eye and body sampled at the same instant.
-  The 9 Sep 2026 entry above records the reproduction; runtime behavior is unchanged.
 - **Portable pictures do not record catalog versions.** A changed catalog can
   move the restored view without a warning. The intended restoration policy
   across catalog revisions is not settled by ADR-0033.

@@ -1947,7 +1947,8 @@ export class GameHarness {
       // observer read it. `search` runs per keystroke and `systemsNearby` is
       // always from the ship; neither should pay for a vantage it ignores.
       get observer() {
-        return observatory.eye
+        const position = observatory.eye
+        return position === null ? null : { position, time: observatory.time }
       },
     }
   }
