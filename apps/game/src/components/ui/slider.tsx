@@ -1,5 +1,6 @@
 'use client'
 
+// Adapted from the shadcn/ui registry: https://ui.shadcn.com/docs/components/slider
 import * as React from 'react'
 import { Slider as SliderPrimitive } from 'radix-ui'
 

@@ -2,6 +2,11 @@ import { licenseOf, SOUNDTRACK_CATEGORY_TITLES } from '@inertialref/protocol'
 import { CATEGORIES_PRESENT, SOUNDTRACK } from '../audio/catalog.ts'
 import { FOCUS_RING } from '../hud/focus.ts'
 import { SITE } from '../site.ts'
+import {
+  SOFTWARE_CREDITS,
+  TECHNIQUE_CREDITS,
+  THIRD_PARTY_LICENSES,
+} from './creditsData.ts'
 import { OverlayPage } from './OverlayPage.tsx'
 
 /*
@@ -27,8 +32,13 @@ const LINK = `rounded text-sky-300 underline-offset-2 hover:text-sky-200 hover:u
 
 export function CreditsPage() {
   return (
-    <OverlayPage title="Credits" subtitle="The soundtrack, and who made it">
+    <OverlayPage title="Credits" subtitle="Soundtrack, software and techniques">
       <div className="flex flex-col gap-4">
+        <p className="type-ui">
+          <a href={THIRD_PARTY_LICENSES} className={LINK}>
+            Third-party license notices
+          </a>
+        </p>
         <p className="text-pretty text-slate-300">
           The music in the Planetarium is the work of the artists below, each
           under the license beside it. Every file the game plays was changed
@@ -101,6 +111,46 @@ export function CreditsPage() {
             guidelines. NASA does not endorse this project.
           </p>
         )}
+
+        {[
+          { id: 'software', title: 'Software', credits: SOFTWARE_CREDITS },
+          { id: 'techniques', title: 'Techniques', credits: TECHNIQUE_CREDITS },
+        ].map(({ id, title, credits }) => (
+          <section
+            key={id}
+            aria-labelledby={id}
+            className="flex flex-col gap-2"
+          >
+            <h2 id={id} className="type-label text-sky-400/80">
+              {title}
+            </h2>
+            <ul className="flex flex-col gap-2.5">
+              {credits.map((credit) => (
+                <li
+                  key={credit.name}
+                  className="flex flex-col gap-0.5 border-l border-slate-800 pl-3"
+                >
+                  <p className="text-pretty text-slate-300">
+                    <a
+                      href={credit.url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={LINK}
+                    >
+                      {credit.name}
+                    </a>
+                    {' · '}
+                    {credit.authors}
+                  </p>
+                  <p className="type-ui text-pretty text-slate-400">
+                    {'license' in credit && `${credit.license} · `}
+                    {credit.use}
+                  </p>
+                </li>
+              ))}
+            </ul>
+          </section>
+        ))}
       </div>
     </OverlayPage>
   )

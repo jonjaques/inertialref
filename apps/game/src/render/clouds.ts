@@ -37,6 +37,7 @@ import {
   vec4,
 } from 'three/tsl'
 import type { AtmosphereContext } from '@takram/three-atmosphere/webgpu'
+// John Fewell ports Shota Matsuda's cloud renderer to WebGPU: https://github.com/johnfewell/three-clouds-webgpu
 import {
   assertWebGPUSupported,
   type BakedCloudTextures,

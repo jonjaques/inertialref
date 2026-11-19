@@ -1,5 +1,6 @@
 'use client'
 
+// Adapted from the shadcn/ui registry: https://ui.shadcn.com/docs/components/separator
 import * as React from 'react'
 import { Separator as SeparatorPrimitive } from 'radix-ui'
 

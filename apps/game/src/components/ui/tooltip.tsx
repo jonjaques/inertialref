@@ -1,3 +1,4 @@
+// Adapted from the shadcn/ui registry: https://ui.shadcn.com/docs/components/tooltip
 import * as React from 'react'
 import { Tooltip as TooltipPrimitive } from 'radix-ui'
 

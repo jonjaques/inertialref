@@ -300,6 +300,7 @@ const STEP_LONGEST = 1000
  * (Nubis Evolved). A depth of the medium the march draws, the one its
  * transmittance is formed from: where that medium is the scaled one, with
  * the droplets' diffraction out of it, this is a scaled depth.
+ * Source: https://advances.realtimerendering.com/s2022/SIGGRAPH2022-Advances-NubisEvolved-NoVideos.pdf
  */
 const STEP_DEPTH = 0.3
 const STEP_FLOOR = 3

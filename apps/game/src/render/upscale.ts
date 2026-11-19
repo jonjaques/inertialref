@@ -1,4 +1,5 @@
 import { DebugView, Upscaler, type UpscalePath } from '@pmndrs/upscaler'
+// The upscaler ports AMD's EASU and RCAS shaders: https://github.com/GPUOpen-Effects/FidelityFX-FSR
 import {
   DataTexture,
   FloatType,
