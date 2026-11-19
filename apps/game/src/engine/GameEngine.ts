@@ -543,7 +543,10 @@ export class GameEngine {
         : Object.assign(
             (deps: Parameters<CloudChainFactory>[0]) =>
               factory({ ...deps, front }),
-            { createFront: factory.createFront },
+            {
+              createFront: factory.createFront,
+              appliesWeather: factory.appliesWeather,
+            },
           )
   }
 

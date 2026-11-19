@@ -83,6 +83,8 @@ export interface EngineSnapshot {
   readonly cinema: boolean
   /** What the planetarium's camera is on. `null` when it is on nothing. */
   readonly observer: ObserverStatus | null
+  /** Whether the page has a cloud renderer and the sensor can run it. */
+  readonly cloudsAvailable: boolean
   /** What the engine is drawing, so a panel's toggle reads the engine's answer
    *  rather than its own memory of what it asked for. */
   readonly presentation: PresentationSnapshot
@@ -101,6 +103,8 @@ export interface EngineSnapshot {
 export interface EngineSource {
   readonly character?: { status(): CharacterStatus }
   readonly exposure?: Exposure | null
+  readonly cloudsAvailable: boolean
+  readonly sensorDiagnostics: { readonly automaticAvailable: boolean } | null
   readonly harness: {
     status(): HarnessStatus
     observerStatus(): ObserverStatus | null
@@ -139,6 +143,7 @@ const IDLE: EngineSnapshot = {
   status: null,
   cinema: false,
   observer: null,
+  cloudsAvailable: false,
   presentation: NOTHING_DRAWN,
   playhead: null,
 }
@@ -157,6 +162,13 @@ export function sampleOnce(store: EngineStore, source: EngineSource): void {
     status: source.harness.status(),
     cinema: source.owner?.arm === 'cutscene',
     observer: source.harness.observerStatus(),
+    // `automaticAvailable` is the sensor's WebGPU backend test, which the
+    // clouds need as automatic exposure does. The sensor's `clouds` report
+    // would say the same and builds the whole report at each read, which a
+    // sample taken on every store tick cannot afford.
+    cloudsAvailable:
+      source.cloudsAvailable &&
+      source.sensorDiagnostics?.automaticAvailable === true,
     presentation: {
       showShip: source.showShip,
       showOrbits: source.showOrbits,

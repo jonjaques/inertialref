@@ -516,13 +516,13 @@ export function servedAddress(id) {
 }
 
 /**
- * Refuse a take whose frame did not draw its picture's volume. `weather`
- * reads `drawn` once a frame drawn with the picture's levers served its
- * body, but stands at `drawn` until such a frame is on the report, so this
- * reads the clouds' own report as a second guard. A forced address no body
- * has serves nothing, the report says `on: false`, the settle has nothing
- * to wait for, and the plate would be the textured deck, kept as the
- * volume arm.
+ * Refuse a take whose frame did not draw its picture's volume. On the native
+ * capture path, `weather` reports `drawn` when a frame using the picture's
+ * levers serves its body and applies its weather. It starts at `drawn` for
+ * a known request before such a frame is on the report, so this reads the
+ * clouds' own report as a second guard. A forced address no body has serves
+ * nothing, the report says `on: false`, the settle has nothing to wait for,
+ * and the plate would be the textured deck, kept as the volume arm.
  */
 export function checkServed(id, read, refuse) {
   if (read.clouds?.on !== true) refuse('its clouds report nothing drawn')

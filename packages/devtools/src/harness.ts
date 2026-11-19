@@ -1267,6 +1267,7 @@ export class GameHarness {
     return picture
   }
 
+  /** Restore a picture and return the render host's response to its weather request. */
   takePicture(picture: Picture): {
     status: ObserverStatus
     fovDeg: number
@@ -1915,7 +1916,7 @@ export class GameHarness {
       '  ir.descend(address?, {site, steps})',
       '                                fly a descent on paper: level churn, burst, cache',
       '  ir.terrain()                  the live streamer, and the rocks on it',
-      "  ir.clouds()                   the clouds' report under ?clouds=1: levers, frame, caches, bytes, steps",
+      "  ir.clouds()                   the clouds' report: levers, applied weather, frame, caches, bytes, steps",
       "  await ir.cloudRadiance()       the next frame at the trace's texels: luminance and cloud mask",
       "  ir.cloudRadianceDifference(a, b)  two captures' radiance RMSE over their cloud texels",
       '  await ir.terrainCache()        persisted terrain hits, misses and storage',

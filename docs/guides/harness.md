@@ -482,12 +482,15 @@ a warning. This differs from canonical-save drift reporting.
 and current limitation.
 
 **A picture can hold its weather.** Version 3 adds `weather: { regime }`, a
-scenario's id or `'climate'`, and `takePicture` returns what became of it:
-`weather: 'drawn'` under `?clouds=1` on WebGPU, `'unavailable'` without the
-flag or for a regime the build does not know, `'none'` for a picture with no
-weather. Taking it sets three of the clouds' levers — `on`, `weather`, and
-`served` when the body is outside the volume's default set, which is how
-Earth is drawn at all — and puts them back when the observatory lets go.
+scenario's id or `'climate'`. `takePicture` returns `weather: 'drawn'` for
+a known request under `?clouds=1` on WebGPU. The port returns
+`'renderer-default'` because it uses its own weather map. A page without
+volumetric clouds, WebGL, or an unknown regime returns `'unavailable'`, and
+a picture without a weather request returns `'none'`. `ir.clouds()` reports
+the last frame's `served` body and `appliedWeather`. Taking a picture sets
+`on`, `weather`, and `served` when the body is outside the volume's default
+set. This is how the volume draws over Earth. The levers go back when the
+observatory lets go.
 **On a flagged page, taking a picture with no weather turns the clouds off**
 until then, so set `engine.clouds` after `ir.preset`, not before.
 [ADR-0067](../adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md)
@@ -495,8 +498,9 @@ records it.
 
 **The cornerstones** are the nine pictures the weather is judged on, ids
 `weather-e1-cumulus-orbit` to `weather-g6-descent`. `ir.preset` takes them
-like any picture, and no list a player sees shows them. Each was solved for a
-sun, and `apps/headless/src/cornerstoneLedger.test.ts` holds it there in Node;
+like any picture. The planetarium's Clouds section lists them on pages that
+can draw volumetric clouds. Each has a solved sun angle, which
+`apps/headless/src/cornerstoneLedger.test.ts` checks in Node.
 `pnpm cornerstones:ledger` rewrites its snapshot.
 
 ```js

@@ -55,6 +55,7 @@ const deckless: Body = {
 function engine(
   available = true,
   sensorDiagnostics: PictureWeatherEngine['sensorDiagnostics'] = null,
+  appliesWeather = true,
 ): PictureWeatherEngine & {
   writes: number
   loaded: boolean
@@ -82,7 +83,7 @@ function engine(
       this.writes += 1
       levers = Object.freeze({ ...next })
     },
-    cloudsAvailable: available,
+    cloudSystemFactory: available ? { appliesWeather } : null,
     sensorDiagnostics,
     // The deckless body's system loads when the test says so; Earth's is
     // loaded from the start.
@@ -93,8 +94,27 @@ function engine(
   }
 }
 
+function reportOf(
+  levers: CloudLevers,
+  served: string | null,
+  appliedWeather = served === null ? null : levers.weather,
+): CloudRenderReport {
+  return {
+    ...cloudReportIdle(),
+    on: served !== null,
+    levers: { ...levers },
+    served,
+    appliedWeather,
+  }
+}
+
 describe('a picture’s weather as levers', () => {
-  const page = { available: true, served: false, address: EARTH }
+  const page = {
+    available: true,
+    appliesWeather: true,
+    served: false,
+    address: EARTH,
+  }
 
   it('draws a known regime, and forces a body outside the served set by its address', () => {
     const { levers, outcome } = pictureWeatherLevers(
@@ -146,8 +166,7 @@ describe('a picture’s weather as levers', () => {
       levers: { ...lit, on: true, served: null },
       outcome: 'none',
     })
-    // Weather it cannot draw is still off: a picture never draws a weather
-    // other than the one it names.
+    // An unknown regime still turns the volume off.
     expect(
       pictureWeatherLevers(
         lit,
@@ -193,6 +212,46 @@ describe('a picture’s weather as levers', () => {
 })
 
 describe('the hold', () => {
+  it.each(['fair-cumulus', 'climate'])(
+    'takes %s on the port with the volume on and the renderer’s weather',
+    (regime) => {
+      const page = engine(true, null, false)
+      const hold = new PictureWeatherHold()
+      expect(hold.apply(page, { regime }, EARTH)).toBe('renderer-default')
+      expect(page.clouds).toMatchObject({
+        on: true,
+        weather: regime,
+        served: EARTH,
+      })
+    },
+  )
+
+  it('reads the applied weather from the frame even when the requested levers match', () => {
+    const diagnostics: { clouds: CloudRenderReport | null } = { clouds: null }
+    const page = engine(true, diagnostics)
+    const hold = new PictureWeatherHold()
+    hold.apply(page, { regime: 'fair-cumulus' }, EARTH)
+    page.aim(EARTH)
+    diagnostics.clouds = reportOf(page.clouds, EARTH, null)
+    hold.frame(page, true)
+    expect(hold.outcome).toBe('renderer-default')
+
+    diagnostics.clouds = reportOf(page.clouds, null)
+    hold.frame(page, true)
+    expect(hold.outcome).toBe('unavailable')
+  })
+
+  it('reports unavailable when a linked port falls back to WebGL before presenting', () => {
+    const diagnostics: { clouds: CloudRenderReport | null } = { clouds: null }
+    const page = engine(true, diagnostics, false)
+    const hold = new PictureWeatherHold()
+    hold.apply(page, { regime: 'fair-cumulus' }, EARTH)
+    page.aim(EARTH)
+    diagnostics.clouds = cloudReportIdle('webgl')
+    hold.frame(page, true)
+    expect(hold.outcome).toBe('unavailable')
+  })
+
   it('forces Earth for its picture, and puts back what it found when the pictures are left', () => {
     const page = engine()
     page.clouds = { ...page.clouds, stats: true }
@@ -249,7 +308,7 @@ describe('the hold', () => {
     hold.frame(page, true)
     expect(hold.outcome).toBe('unavailable')
     // The chunk lands: the next frame draws the picture's weather.
-    const arrived = { ...page, cloudsAvailable: true }
+    const arrived = { ...page, cloudSystemFactory: { appliesWeather: true } }
     hold.frame(arrived, true)
     expect(hold.outcome).toBe('drawn')
     expect(arrived.clouds).toMatchObject({ on: true, served: EARTH })
@@ -312,18 +371,7 @@ describe('the hold', () => {
     expect(early.clouds.served).toBeNull()
   })
 
-  it('reads drawn only once a frame drawn with its levers served the picture’s body', () => {
-    // What the system reports after a frame drawn with `levers`, serving
-    // `served`: `on` is whether that frame drew anything.
-    const reportOf = (
-      levers: CloudLevers,
-      served: string | null,
-    ): CloudRenderReport => ({
-      ...cloudReportIdle(),
-      on: served !== null,
-      levers: { ...levers },
-      served,
-    })
+  it('confirms a native take against the body served by a matching frame', () => {
     const diagnostics: { clouds: CloudRenderReport | null } = { clouds: null }
     const page = engine(true, diagnostics)
     const hold = new PictureWeatherHold()

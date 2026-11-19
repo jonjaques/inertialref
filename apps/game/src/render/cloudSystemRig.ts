@@ -451,7 +451,10 @@ export function cloudRig(
                       ...deps,
                       skyTable: options.skyTable!,
                     }),
-                  { createFront: createCloudSystem.createFront },
+                  {
+                    createFront: createCloudSystem.createFront,
+                    appliesWeather: createCloudSystem.appliesWeather,
+                  },
                 ),
         },
   )

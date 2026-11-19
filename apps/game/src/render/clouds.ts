@@ -416,6 +416,8 @@ function build(
       // that shares it with the page splits it out for every visit to load.
       leversHash: null,
       served: served?.address ?? null,
+      // The port draws its own weather map on the served body.
+      appliedWeather: null,
       regime: on ? 'converging' : 'off',
       extents: {
         render: [scenePass.renderTarget.width, scenePass.renderTarget.height],
@@ -654,7 +656,7 @@ async function load(
   return {
     factory: Object.assign(
       (deps: CloudSystemDeps) => build(deps, assets, settings),
-      { createFront },
+      { createFront, appliesWeather: false },
     ),
     handle: settings,
   }
