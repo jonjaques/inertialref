@@ -40,7 +40,11 @@ function deferred<T>(): {
 }
 
 function page(options: { webgpu?: boolean } = {}) {
-  const target: CloudsTarget = { cloudSystemFactory: null, cloudTunables: null }
+  const target: CloudsTarget = {
+    cloudSystemFactory: null,
+    cloudTunables: null,
+    cloudSkyTable: false,
+  }
   const loads: ReturnType<
     typeof deferred<{ factory: CloudChainFactory; handle: CloudsHandle }>
   >[] = []
@@ -75,6 +79,7 @@ describe('the canvas’s clouds', () => {
     expect(target).toEqual({
       cloudSystemFactory: system,
       cloudTunables: handle,
+      cloudSkyTable: false,
     })
   })
 
@@ -86,7 +91,11 @@ describe('the canvas’s clouds', () => {
     await off
     loads[0]!.resolve({ factory: system, handle })
     await on
-    expect(target).toEqual({ cloudSystemFactory: null, cloudTunables: null })
+    expect(target).toEqual({
+      cloudSystemFactory: null,
+      cloudTunables: null,
+      cloudSkyTable: false,
+    })
     // And on again: the newest build is the one that publishes.
     const again = canvas.withClouds(renderer(WEBGPU), SETTING_CLOUDS)({})
     loads[1]!.resolve({ factory: system, handle })
@@ -100,7 +109,11 @@ describe('the canvas’s clouds', () => {
     expect(await canvas.withClouds(renderer(WEBGL), SETTING_CLOUDS)({})).toBe(
       WEBGL,
     )
-    expect(target).toEqual({ cloudSystemFactory: null, cloudTunables: null })
+    expect(target).toEqual({
+      cloudSystemFactory: null,
+      cloudTunables: null,
+      cloudSkyTable: false,
+    })
   })
 
   it('loads nothing for the setting where the browser offers no WebGPU', async () => {
@@ -133,33 +146,41 @@ describe('the canvas’s clouds', () => {
     await linked
     expect(target.cloudSystemFactory).toBe(system)
     await canvas.withClouds(renderer(WEBGPU), cloudRendererOf('1')!)({})
-    expect(target).toEqual({ cloudSystemFactory: native, cloudTunables: null })
+    expect(target).toEqual({
+      cloudSystemFactory: native,
+      cloudTunables: null,
+      cloudSkyTable: true,
+    })
   })
 
   it('tells the warm-up a build draws clouds before its renderer exists', async () => {
-    const { loads, canvas } = page()
+    const { target, loads, canvas } = page()
     /*
      * What a warm-up started from the renderer's own `onReady` sees. The
      * preload is keyed on the renderer's output, which is published while the
      * factory runs and before any cloud load lands.
      */
-    const seen: boolean[] = []
+    const seen: { clouds: boolean; sky: boolean }[] = []
     const watching =
       <R>(value: R) =>
       (): Promise<R> => {
-        seen.push(buildsClouds())
+        seen.push({ clouds: buildsClouds(), sky: target.cloudSkyTable })
         return Promise.resolve(value)
       }
     const on = canvas.withClouds(watching(webgpu()), SETTING_CLOUDS)({})
-    expect(seen).toEqual([true])
+    expect(seen).toEqual([{ clouds: true, sky: false }])
     await canvas.withoutClouds(watching(webgpu()))({})
-    expect(seen).toEqual([true, false])
+    expect(seen.at(-1)).toEqual({ clouds: false, sky: false })
     // A superseded build's late load does not turn it back on.
     loads[0]!.resolve({ factory: system, handle })
     await on
     expect(buildsClouds()).toBe(false)
     await canvas.withClouds(watching(webgpu()), cloudRendererOf('1')!)({})
-    expect(seen.at(-1)).toBe(true)
+    expect(seen.at(-1)).toEqual({ clouds: true, sky: true })
+    const port = canvas.withClouds(watching(webgpu()), SETTING_CLOUDS)({})
+    expect(seen.at(-1)).toEqual({ clouds: true, sky: false })
+    loads[1]!.resolve({ factory: system, handle })
+    await port
   })
 
   it('reads a link’s `?clouds=`', () => {

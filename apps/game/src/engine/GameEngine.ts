@@ -556,6 +556,9 @@ export class GameEngine {
    */
   cloudTunables: CloudsHandle | null = null
 
+  /** Whether the canvas being built needs the native march's sky table. */
+  cloudSkyTable = false
+
   /**
    * What a material drawn after the composite reads the clouds in front of
    * it through: this frame's trace textures and the numbers beside them.
