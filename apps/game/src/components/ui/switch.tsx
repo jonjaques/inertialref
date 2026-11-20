@@ -1,3 +1,4 @@
+// Adapted from the shadcn/ui registry: https://ui.shadcn.com/docs/components/switch
 import * as React from 'react'
 import { Switch as SwitchPrimitive } from 'radix-ui'
 

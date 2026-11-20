@@ -112,7 +112,7 @@ export const PAGES: readonly PageMeta[] = [
     path: CREDITS,
     title: 'Credits',
     description:
-      'Every track the Planetarium plays: who made it, the license it is shared under, where it came from, and what this build changed.',
+      'The artists behind the Planetarium soundtrack and the people whose software and published techniques InertialRef uses.',
     index: true,
   },
   {

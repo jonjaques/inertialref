@@ -291,8 +291,9 @@ export function travelTargets(
   world: World,
   from: UniverseVector,
   options: TravelTargetOptions = {},
+  /** The instant at which `from` is sampled. */
+  time = world.clock.time,
 ): readonly TravelTarget[] {
-  const time = world.clock.time
   const loaded = new Map<SystemId, StarSystem>(
     world.loadedSystems().map((s) => [s.id, s]),
   )
@@ -588,8 +589,9 @@ export function targetsFor(
   from: UniverseVector,
   addresses: readonly string[],
   currentSystem: SystemId | null = null,
+  /** The instant at which `from` is sampled. */
+  time = world.clock.time,
 ): readonly TravelTarget[] {
-  const time = world.clock.time
   const rows: TravelTarget[] = []
   for (const text of addresses) {
     let destination: TravelDestination

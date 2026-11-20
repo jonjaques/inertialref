@@ -43,6 +43,7 @@ export const ZERO_FIELD: FieldSample = { value: 0, dx: 0, dy: 0, dz: 0 }
  * parallel pairs, so the lattice cannot produce a cell whose eight corners all
  * point the same way and read as a flat spot. Ken Perlin's 2002 improvement,
  * and it costs a table lookup instead of a normalize.
+ * Source: https://doi.org/10.1145/566654.566636
  */
 const GRADIENT_COUNT = 12
 const GRADIENT_X = new Float64Array([1, -1, 1, -1, 1, -1, 1, -1, 0, 0, 0, 0])

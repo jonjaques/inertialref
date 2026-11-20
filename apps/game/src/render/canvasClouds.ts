@@ -7,15 +7,16 @@ import { buildingClouds } from './cloudBuild.ts'
 
 /*
  * What a canvas's renderer factory publishes to the engine about the
- * clouds: the chain's cloud system and the port's settings handle.
+ * clouds: the chain's cloud system, the port's settings handle and the
+ * atmosphere tables the build needs.
  *
  * The cloud chunk is a choice made when the renderer is built, so the canvas
  * key rebuilds the renderer when the setting changes, as it does for the
  * output range. A build's loads are still in flight when the next build
- * starts, and the engine's two fields are the page's, not the canvas's, so
- * only the newest build publishes: a canvas turned off while its load was
- * pending would otherwise have its cloud system put back under the canvas
- * that replaced it, and the next chain would draw the clouds the switch had
+ * starts, and the engine's fields are the page's, not the canvas's, so only
+ * the newest build publishes: a canvas turned off while its load was pending
+ * would otherwise have its cloud system put back under the canvas that
+ * replaced it, and the next chain would draw the clouds the switch had
  * turned off.
  */
 
@@ -52,10 +53,11 @@ export function cloudRendererOf(value: string | null): CloudRenderer | null {
   return null
 }
 
-/** Where a canvas publishes the clouds: the engine's two fields. */
+/** Where a canvas publishes the clouds. */
 export interface CloudsTarget {
   cloudSystemFactory: CloudChainFactory | null
   cloudTunables: CloudsHandle | null
+  cloudSkyTable: boolean
 }
 
 /** The two chunks, each behind the caller's `import()`. */
@@ -99,6 +101,8 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
       return async (props) => {
         // Before the renderer exists: its preload warms for the clouds.
         buildingClouds(true)
+        // The renderer can open the prebake while the cloud chunk is loading.
+        target.cloudSkyTable = clouds.kind === 'native'
         const build = ++builds
         const newest = (): boolean => build === builds
         if (clouds.kind === 'native') {
@@ -147,6 +151,7 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
     withoutClouds<P, R>(factory: Factory<P, R>): Factory<P, R> {
       return (props) => {
         buildingClouds(false)
+        target.cloudSkyTable = false
         builds += 1
         publish(null, null)
         return factory(props)

@@ -417,7 +417,7 @@ describe('the front handle', () => {
           built.push(deps.front)
           return {} as CloudSystem
         },
-        { createFront: createCloudFrontHandle },
+        { createFront: createCloudFrontHandle, appliesWeather: true },
       )
       engine.cloudSystemFactory = chunk
       const handle = engine.cloudFront
@@ -426,6 +426,7 @@ describe('the front handle', () => {
       // One function for the page's life: the sensor's effect depends on it.
       const factory = engine.cloudSystemFactory!
       expect(engine.cloudSystemFactory).toBe(factory)
+      expect(factory.appliesWeather).toBe(true)
       // Two chains, as a picture change builds a second: one handle for both.
       factory({} as CloudSystemDeps)
       factory({} as CloudSystemDeps)

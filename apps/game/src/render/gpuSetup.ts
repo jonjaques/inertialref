@@ -92,3 +92,9 @@ Object.assign(globalThis, { scheduler })
  * that reads the DOM at import time pass in this suite and fail in the worker
  * it is meant to run in.
  */
+
+/** Append a shader inventory only when asked. Shader sizes never gate this run. */
+if (process.env.IR_WGSL_REPORT) {
+  const { reportWgslStorage } = await import('./wgslStorageReport.ts')
+  reportWgslStorage(process.env.IR_WGSL_REPORT)
+}

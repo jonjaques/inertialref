@@ -1,3 +1,4 @@
+// Adapted from the shadcn/ui registry: https://ui.shadcn.com/docs/components/input
 import * as React from 'react'
 
 import { cn } from '@/lib/utils'

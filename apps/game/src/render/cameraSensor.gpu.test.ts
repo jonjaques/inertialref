@@ -34,6 +34,7 @@ import { DISPLAY_P3, LINEAR_P3 } from './gamut.ts'
 import { createRenderOrigin, rebase, UV } from '@inertialref/spatial'
 import { DEFAULT_PICTURE } from './picture.ts'
 import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+import { wgslStorage, WGSL_STORAGE_LIMIT } from './wgslStorage.ts'
 
 /** The production picture with its four samples off, for a pass read back directly. */
 const NO_MSAA = { ...DEFAULT_PICTURE, aa: 'off' } as const
@@ -81,39 +82,14 @@ it.each([SRGBColorSpace, DISPLAY_P3, LINEAR_P3])(
       renderer.outputColorSpace = LinearSRGBColorSpace
       renderer.toneMapping = NoToneMapping
       const { fragmentShader } = await gpu.shader(quad, outputCamera, scene)
-      const declarations = [
-        ...fragmentShader.matchAll(/var<private>\s+\w+\s*:\s*([^;]+);/g),
-      ]
-      expect(declarations.length).toBeGreaterThan(0)
-      expect(declarations.length).toBe(
-        fragmentShader.match(/var<private>/g)?.length,
-      )
-      // WGSL sums SizeOf for all private variables, including output padding.
-      // Keep the supported types explicit so a builder change cannot undercount.
-      const sizes: Record<string, number> = {
-        f32: 4,
-        i32: 4,
-        u32: 4,
-        'vec2<f32>': 8,
-        'vec3<f32>': 12,
-        'vec4<f32>': 16,
-        OutputStruct: 16,
-      }
-      const output = fragmentShader.match(
-        /struct OutputStruct\s*\{([^}]+)\}/,
-      )?.[1]
-      expect(output?.replace(/@\w+\([^)]*\)|\s/g, '')).toBe('color:vec4<f32>')
-      let bytes = 0
-      for (const [, type] of declarations) {
-        const size = sizes[type!.trim()]
-        expect(size, `unknown private WGSL type: ${type}`).toBeDefined()
-        bytes += size!
-      }
+      // WGSL sums SizeOf for the private variables the shader accesses,
+      // including the output struct's padding.
+      const { privateBytes } = wgslStorage(fragmentShader, 'main')
       console.log(
-        `Camera ${colorSpace}: ${bytes} bytes of private WGSL storage`,
+        `Camera ${colorSpace}: ${privateBytes} bytes of private WGSL storage`,
       )
-      // https://www.w3.org/TR/WGSL/#limits: implementations may enforce 8192.
-      expect(bytes).toBeLessThanOrEqual(8192)
+      expect(privateBytes).toBeGreaterThan(0)
+      expect(privateBytes).toBeLessThanOrEqual(WGSL_STORAGE_LIMIT)
     } finally {
       compile.mockRestore()
       sensor.dispose()

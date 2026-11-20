@@ -31,11 +31,18 @@ import {
   scatteringVia,
   warmScattering,
 } from './atmosphereLuts.ts'
+import {
+  canvasClouds,
+  cloudRendererOf,
+  SETTING_CLOUDS,
+} from './canvasClouds.ts'
+import type { CloudChainFactory } from './cloudSystem.ts'
+import type { CloudsHandle } from './cloudsTunables.ts'
 import { createGameTaskRegistry } from '../workers/registry.ts'
 
 /*
- * The bake on the pool is the bake on the main thread, and a page without
- * clouds pays nothing for the sky table.
+ * The bake on the pool is the bake on the main thread. Only the native
+ * cloud march asks for the sky table.
  *
  * The consumer trusts a worker's tables exactly as it trusts its own, so the
  * two have to be the same arrays — and the wire is the part that can differ:
@@ -304,27 +311,66 @@ describe('the scattering cache', () => {
     }
   })
 
-  it('wants the sky where the engine holds the cloud system’s factory, and nowhere else', () => {
+  it('requests the sky only for the native march as the canvas rebuilds', async () => {
     const body = (thickness: number) =>
       ({
         appearance: { haze: hazeAt(thickness) },
         airTop: topRatio,
         airHeights: heights,
       }) as unknown as RenderBody
-    const noPool = () => null
-    expect(scatteringOf({ pool: noPool }, body(1.05))?.sky).toBeUndefined()
-    expect(
-      scatteringOf({ pool: noPool, cloudSystemFactory: null }, body(1.06))?.sky,
-    ).toBeUndefined()
-    expect(skyBakes.count).toBe(0)
-    expect(
-      scatteringOf({ pool: noPool, cloudSystemFactory: () => null }, body(1.07))
-        ?.sky,
-    ).toBeDefined()
-    expect(
-      scatteringOf({ pool: noPool }, body(1.08), { sky: true })?.sky,
-    ).toBeDefined()
-    expect(skyBakes.count).toBe(2)
+    const factory = (() => null) as unknown as CloudChainFactory
+    const handle = {} as CloudsHandle
+    const pool = inlinePool()
+    const engine = {
+      pool: () => pool,
+      cloudSystemFactory: null,
+      cloudTunables: null,
+      cloudSkyTable: false,
+    }
+    const canvas = canvasClouds(engine, {
+      native: async () => factory,
+      takram: async () => ({ factory, handle }),
+      webgpu: () => true,
+    })
+    const renderer = async () => ({ backend: { isWebGPUBackend: true } })
+    const submit = vi.spyOn(pool, 'submit')
+    const request = (thickness: number) => {
+      scatteringOf(engine, body(thickness))
+      expect(submit).toHaveBeenLastCalledWith(bakeAtmosphereTask, {
+        haze: hazeAt(thickness),
+        topRatio,
+        heights,
+        wanted: expect.any(Array),
+      })
+      return submit.mock.lastCall?.[1]
+    }
+    try {
+      await canvas.withoutClouds(renderer)({})
+      expect(request(1.05)).toMatchObject({ wanted: [] })
+      await canvas.withClouds(renderer, SETTING_CLOUDS)({})
+      expect(request(1.06)).toMatchObject({ wanted: [] })
+      const bare = await warmScattering(pool, hazeAt(1.06), topRatio, heights)
+      expect(bare.sky).toBeUndefined()
+      expect(skyBakes.count).toBe(0)
+
+      await canvas.withClouds(renderer, cloudRendererOf('1')!)({})
+      expect(request(1.06)).toMatchObject({ wanted: ['sky'] })
+      const lit = await warmScattering(pool, hazeAt(1.06), topRatio, heights, {
+        sky: true,
+      })
+      expect(scatteringOf(engine, body(1.06))?.sky).toBe(lit.sky)
+      expect(lit.sky).toBeDefined()
+      expect(lit.transmittance).toBe(bare.transmittance)
+      expect(lit.multiScatter).toBe(bare.multiScatter)
+
+      await canvas.withClouds(renderer, SETTING_CLOUDS)({})
+      expect(request(1.07)).toMatchObject({ wanted: [] })
+      const next = await warmScattering(pool, hazeAt(1.07), topRatio, heights)
+      expect(next.sky).toBeUndefined()
+      expect(skyBakes.count).toBe(1)
+    } finally {
+      pool.terminate()
+    }
   })
 })
 

@@ -30,24 +30,31 @@ import {
 /*
  * Finding somewhere: the questions a console asks of the volume.
  *
- * `travel.ts` answers each question from a fixed point — a sweep, an index
- * lookup, a set of rows. This decides the point. A search is asked from the
- * ship, or from the planetarium's eye when the question is about what the
- * camera is looking at, and the two are nowhere near each other in that mode.
- * Everything here is a function of the world, the vantage and the options,
- * with no harness state in it, so the harness forwards and the tests call
- * these directly.
+ * `travel.ts` answers each question from a fixed point and instant — a sweep,
+ * an index lookup, a set of rows. This decides both. A search is asked from
+ * the ship, at the simulation tick, or from the planetarium's eye, at the
+ * instant the eye depicts, when the question is about what the camera is
+ * looking at. The two are nowhere near each other in that mode, and a held
+ * photograph can stand months from the tick: a body sampled at the tick is
+ * then an orbit's width from the one in the frame. Everything here is a
+ * function of the world, the vantage and the options, with no harness state
+ * in it, so the harness forwards and the tests call these directly.
  */
 
 const log = getLogger('devtools.finding')
+
+interface DistanceOrigin {
+  readonly position: UniverseVector
+  readonly time: number
+}
 
 /** Where a search is asked from. */
 export interface Vantage {
   readonly world: World
   /** The entity the ship-side questions are about, if there is one. */
   readonly player: EntityId | null
-  /** The planetarium's eye, while it holds a target. */
-  readonly observer: UniverseVector | null
+  /** The planetarium's eye and the instant it depicts, while it holds a target. */
+  readonly observer: DistanceOrigin | null
 }
 
 /** Where the listing is taken from: the player, or the first system loaded. */
@@ -58,7 +65,7 @@ export function hereOf(world: World, player: EntityId | null): UniverseVector {
 }
 
 /**
- * The point a listing measures from.
+ * The point and instant a listing measures from.
  *
  * `origin: 'observer'` falls back to the player rather than returning
  * nothing, and that is not defensiveness — the observatory holds no target
@@ -69,10 +76,12 @@ export function hereOf(world: World, player: EntityId | null): UniverseVector {
 function originOf(
   vantage: Vantage,
   options: TravelTargetOptions,
-): UniverseVector {
+): DistanceOrigin {
   return (
-    (options.origin === 'observer' ? vantage.observer : null) ??
-    hereOf(vantage.world, vantage.player)
+    (options.origin === 'observer' ? vantage.observer : null) ?? {
+      position: hereOf(vantage.world, vantage.player),
+      time: vantage.world.clock.time,
+    }
   )
 }
 
@@ -122,7 +131,8 @@ export function nearbyTargets(
   vantage: Vantage,
   options: TravelTargetOptions = {},
 ): readonly TravelTarget[] {
-  return travelTargets(vantage.world, originOf(vantage, options), options)
+  const { position, time } = originOf(vantage, options)
+  return travelTargets(vantage.world, position, options, time)
 }
 
 /**
@@ -140,7 +150,7 @@ export function searchByName(
   text: string,
   options: TravelTargetOptions = {},
 ): readonly TravelTarget[] {
-  return searchTargets(vantage.world, originOf(vantage, options), text)
+  return searchTargets(vantage.world, originOf(vantage, options).position, text)
 }
 
 /**
@@ -159,11 +169,13 @@ export function rowsFor(
   addresses: readonly string[],
   options: TravelTargetOptions = {},
 ): readonly TravelTarget[] {
+  const { position, time } = originOf(vantage, options)
   return targetsFor(
     vantage.world,
-    originOf(vantage, options),
+    position,
     addresses,
     currentSystemOf(vantage.world, vantage.player),
+    time,
   )
 }
 
@@ -235,7 +247,7 @@ export function findWorlds(
   options: FindWorldsOptions = {},
 ): WorldSweep {
   const { world } = vantage
-  const from = vantage.observer ?? hereOf(world, vantage.player)
+  const from = vantage.observer?.position ?? hereOf(world, vantage.player)
   const stubs = systemsWithin(
     world.galaxySeed,
     world.catalog,

@@ -15,7 +15,7 @@ import {
  *
  * The bake is pure arithmetic in `@inertialref/rendering` — a recipe from the
  * authored haze, then two tables marched from it and the sky table summed
- * from those two where the page has clouds to read it — and it is the
+ * from those two for the native cloud march — and it is the
  * largest single thing left in an arrival: a jump to a generated system
  * landed a 39.7 ms bake inside a 43.3 ms frame the first time one of its
  * hazes was seen, before the sky table, which costs about 1.2 times the
@@ -44,9 +44,8 @@ export interface BakeAtmosphereRequest {
   readonly topRatio: number
   readonly heights: AirHeights
   /**
-   * The derived tables the caller will read (`AIR_TABLE_JOBS`). A page
-   * without clouds reads none of them, so it asks for none and the bake is
-   * the two tables it always was.
+   * The derived tables the caller reads (`AIR_TABLE_JOBS`). The sky table
+   * lights the native cloud march. The base tables serve the rest of the scene.
    */
   readonly wanted: readonly AirTableName[]
 }

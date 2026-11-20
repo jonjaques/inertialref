@@ -14,6 +14,7 @@ import type { Seed } from './seed.ts'
  * two rounds of cross-lane mixing, one shift-xor between them. Three or four
  * statistically independent uint32 for roughly the cost of one `mix32`, which
  * is why the crater band can afford eight lattice levels.
+ * Source: https://jcgt.org/published/0009/03/02/
  *
  * The arithmetic is `Math.imul` and unsigned shifts throughout, exactly as
  * `hash.ts` is and for the same reason: the same cell must produce the same

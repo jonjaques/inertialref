@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { createElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
 import { type Location, MemoryRouter } from 'react-router'
@@ -27,6 +28,7 @@ import {
 import { KeymapProvider } from '../input/KeymapProvider.tsx'
 import { AccountPage } from './AccountPage.tsx'
 import { OverlayRoutes } from './OverlayRoutes.tsx'
+import { SOFTWARE_CREDITS, TECHNIQUE_CREDITS } from './creditsData.ts'
 
 /** Text as React writes it into markup, with its five characters escaped. */
 const escaped = (text: string): string =>
@@ -211,6 +213,30 @@ describe('the routed dialogs', () => {
       expect(credits).toContain(escaped(track.credit))
       expect(credits).toContain(`href="${licenseOf(track).url}"`)
       expect(credits).toContain(`href="${escaped(track.licensor)}"`)
+    }
+  })
+
+  it('credits the cloud port and links to the distributed license notices', () => {
+    const credits = at(CREDITS)
+    expect(credits).toContain('three-clouds-webgpu')
+    expect(credits).toContain('John Fewell')
+    expect(credits).toContain('href="/third-party-licenses.txt"')
+  })
+
+  it('renders the same software and technique credits as NOTICE', () => {
+    const page = at(CREDITS)
+    const notice = readFileSync(
+      new URL('../../../../NOTICE', import.meta.url),
+      'utf8',
+    )
+    for (const credit of [...SOFTWARE_CREDITS, ...TECHNIQUE_CREDITS]) {
+      expect(page.includes(escaped(credit.name)), credit.name).toBe(true)
+      expect(page.includes(`href="${escaped(credit.url)}"`), credit.name).toBe(
+        true,
+      )
+      expect(notice).toContain(
+        `${credit.name}\n  ${credit.authors}, ${credit.url}`,
+      )
     }
   })
 

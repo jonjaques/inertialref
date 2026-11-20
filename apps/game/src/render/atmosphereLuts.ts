@@ -44,14 +44,15 @@ import type { Rgb } from './bodyUniforms.ts'
  * so two bodies with the same authored haze and shell share one bake.
  *
  * The set is the transmittance and Ψ, which every surface in the air
- * marches through, and the sky table where it is wanted, which only the
- * clouds read (`bakeSkyMoments`). It is wanted on a page that built the
- * cloud system (`scatteringOf`), and on no other: there nothing reads it,
- * and it would cost about 1.2 times the other two tables' bake and 13 KB a
- * haze for nothing. A haze baked without it and later wanted with it takes
- * it as a job of its own under the same key (`skyFor`, `warmSky`), and the
- * set it lands in is a new object, so the cloud's `air.bind`, which binds
- * on a change of set, binds it on the frame it lands.
+ * marches through, and the sky table that lights the native march
+ * (`bakeSkyMoments`). It is wanted on a page whose canvas builds the march
+ * (`scatteringWants`), and on no other: the port lights its clouds from its
+ * own atmosphere, and a page without clouds reads nothing beyond the two,
+ * so there the table would cost more than their bake together, and 13 KB a
+ * haze, for nothing. A haze baked without it and later wanted with it takes it as
+ * a job of its own under the same key (`skyFor`, `warmSky`), and the set it
+ * lands in is a new object, so the march's `air.bind`, which binds on a
+ * change of set, binds it on the frame it lands.
  *
  * Baking is lazy, on the first ask for a body's shell, and it runs in one of
  * two places. On the pool, through `render.bakeAtmosphere` — `warmScattering`
@@ -73,7 +74,7 @@ export interface AtmosphereScattering {
   /**
    * The sky's light on a cloud (`bakeSkyMoments`), 102 × 16 RGBA16F,
    * 13,056 B: what `AirUniforms.sky` binds through `bind`, which reads this
-   * set as `AirTables`. Only the cloud passes read it, so the shell, the
+   * set as `AirTables`. Only the native cloud march reads it, so the shell, the
    * sphere, the ground and the sea that bind the same set compile no
    * binding for it. Absent where no ask wanted it (`ScatteringWants`), and
    * the bundle then binds the dark stand-in in its place.
@@ -90,11 +91,27 @@ export interface AtmosphereScattering {
 
 /** What an ask wants of a bake beyond the air's own two tables. */
 export interface ScatteringWants {
-  /** The sky table, which only the clouds read. */
+  /** The sky table for the native cloud march. */
   readonly sky?: boolean
 }
 
 const NOTHING_MORE: ScatteringWants = {}
+const WITH_SKY: ScatteringWants = { sky: true }
+
+/**
+ * What a bake asks for beyond the air's two tables: the sky table where the
+ * canvas being built draws the native march, and nothing more elsewhere.
+ * The canvas factory sets `cloudSkyTable` as it is invoked, before the
+ * renderer exists, so the boot prebake, the mid-session prebake and the
+ * draw-time ask (`scatteringOf`) want one set and the draw-time ask is a
+ * lookup. A prebake without the sky leaves each haze's sky to a late job of
+ * its own once the march asks for it.
+ */
+export function scatteringWants(engine: {
+  readonly cloudSkyTable?: boolean
+}): ScatteringWants {
+  return engine.cloudSkyTable === true ? WITH_SKY : NOTHING_MORE
+}
 
 function wantedOf(wants: ScatteringWants): readonly AirTableName[] {
   return wants.sky === true ? ['sky'] : []
@@ -514,20 +531,16 @@ export function airOverheadRgb(
  * one bake; each ask still builds the key, so a caller drawing several of
  * them asks once. Null for a body with no haze.
  *
- * The sky table is wanted where the page built the cloud system, which the
- * engine says by holding `?clouds=1`'s factory (`cloudSystemFactory`, set
- * before anything that asks here is mounted, and for the page's lifetime).
- * A caller that knows better, a rig with no engine, says so in `wants`.
+ * The native march asks for its sky table through `scatteringWants`. A rig
+ * with no canvas can request the table in `wants`.
  */
 export function scatteringOf(
   engine: {
     pool(): WorkerPool | null
-    readonly cloudSystemFactory?: unknown
+    readonly cloudSkyTable?: boolean
   },
   body: RenderBody,
-  wants: ScatteringWants = {
-    sky: (engine.cloudSystemFactory ?? null) !== null,
-  },
+  wants: ScatteringWants = scatteringWants(engine),
 ): AtmosphereScattering | null {
   const haze = body.appearance.haze
   if (haze === null) return null

@@ -5,6 +5,7 @@ import { deriveSeed, type Seed } from './seed.ts'
  * xoshiro128** — 32-bit state, 2^128 period, passes BigCrush-class tests, and
  * (the part that matters here) is expressible in exact 32-bit integer ops so
  * every JS engine produces identical streams.
+ * Source: https://prng.di.unimi.it/xoshiro128starstar.c
  *
  * An Rng is a short-lived object: you derive a seed for an address, draw the
  * handful of values that address needs, and drop it. Nothing shares a stream

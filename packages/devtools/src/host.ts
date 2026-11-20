@@ -226,8 +226,14 @@ export interface TerrainCacheReport {
 /** `RenderHost.boot`: renderer absent, drawing under the cover, or up. */
 export type BootPhase = 'booting' | 'drawing' | 'booted'
 
-/** What became of a picture's weather: drawn, asked for and not drawn, or not asked for. */
-export type PictureWeatherOutcome = 'drawn' | 'unavailable' | 'none'
+/**
+ * A picture's weather outcome. `drawn` is the requested weather.
+ * `renderer-default` is the renderer's own weather over the picture's body.
+ * `unavailable` means the volume cannot serve the request, and `none` means
+ * the picture makes no request.
+ */
+export type PictureWeatherOutcome =
+  'drawn' | 'renderer-default' | 'unavailable' | 'none'
 
 /**
  * The render side of a host: what a frame can answer, and what it can be told.
@@ -327,9 +333,11 @@ export interface RenderHost {
    * while its default is off, and the regime standing in for the climate.
    * The host keeps the levers it found and puts them back when the picture
    * is left, on the observatory's clear or on the next picture, so a
-   * picture's forced body never outlives it. `'unavailable'` is weather the
-   * host cannot draw — no `?clouds=1`, no WebGPU, or a regime this build
-   * does not know — and headlessly every weather is.
+   * picture's forced body never outlives it. `'unavailable'` covers pages
+   * with no cloud renderer, no WebGPU, or a regime this build does not know.
+   * Headlessly every weather request is unavailable. The result describes
+   * the renderer's response when the picture is taken. A later frame can
+   * refine it based on which body and weather the frame draws.
    */
   setWeather(
     weather: PictureWeather | null,

@@ -1,3 +1,4 @@
+// Adapted from the shadcn/ui registry: https://ui.shadcn.com/docs/components/badge
 import * as React from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { Slot } from 'radix-ui'
