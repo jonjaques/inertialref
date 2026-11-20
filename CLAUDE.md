@@ -119,13 +119,13 @@ Most of `.claude/` runs without being asked.
   thread settles, and a server started from an agent's shell is that agent's to
   stop. `../tng-inertial` resolves only from the main checkout.
 
-| Skill          | For                                                     |
-| -------------- | ------------------------------------------------------- |
-| `/drive`       | Driving the game: harness, headless runner, CDP driver  |
-| `/ship`        | Update → commit → push → PR, ready. No gate. You invoke |
-| `/parallel`    | Fanning work across worktrees. Never auto-invoked       |
-| `/adr`         | Writing an ADR in house style                           |
-| `/context-log` | Appending to `CONTEXT.md`                               |
+| Skill          | For                                                        |
+| -------------- | ---------------------------------------------------------- |
+| `/drive`       | Driving the game: harness, headless runner, CDP driver     |
+| `/ship`        | Update → commit → push → PR, ready. No gate. Once verified |
+| `/parallel`    | Fanning work across worktrees. Never auto-invoked          |
+| `/adr`         | Writing an ADR in house style                              |
+| `/context-log` | Appending to `CONTEXT.md`                                  |
 
 | Agent                  | For                                                           |
 | ---------------------- | ------------------------------------------------------------- |
@@ -190,7 +190,8 @@ agent exactly as they bind a subagent.
 - Commit each coherent piece as it goes green, without asking. Verify as you
   go — the Stop gate on every turn, `pnpm presets:compare` for anything
   visible, `pnpm test:gpu` for a shader — because push and the pull request
-  are `/ship`, which runs no gate: it brings the branch up to date with
+  are `/ship`, which an agent runs without asking once the work is verified
+  and which runs no gate: it brings the branch up to date with
   `origin/main`, commits, pushes and opens the PR ready, and CI runs
   `pnpm check` on what it pushed. A branch is rebased until its first push and
   merged up to date after it, because no push is forced. `main` enforces

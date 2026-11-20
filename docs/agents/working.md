@@ -192,8 +192,9 @@ A commit message is the one place a backward glance is correct, because a commit
 exists to describe a change. That license does not extend to the source comment
 next to it.
 
-Pushing and opening a pull request are [`/ship`](../../.claude/skills/ship/SKILL.md).
-It brings the branch up to date with `origin/main`, commits what is uncommitted in house style, pushes,
+Pushing and opening a pull request are [`/ship`](../../.claude/skills/ship/SKILL.md),
+and an agent runs it without asking once its work is verified; merging the pull request
+stays with the user. It brings the branch up to date with `origin/main`, commits what is uncommitted in house style, pushes,
 opens the PR **ready rather than draft** and watches CI. It runs no check of its own:
 "ship" is said when the work is verified, and the pull request's verification section
 lists what ran — the gate on every turn, the `pnpm presets:compare` table for anything
