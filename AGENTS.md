@@ -34,8 +34,10 @@ adapters. [Codex setup](.codex/README.md) explains its native configuration.
   copied skill. Resolve its relative links from the target's directory.
 - `.codex/agents/` loads the shared Claude briefs with Codex-specific tool,
   memory, and worktree instructions. Do not translate `.claude` into `.Codex`.
-- `ship`, `parallel`, `invariant-auditor`, and `docs-curator` are opt-in.
-  Do not launch the review commands on the user's behalf. A configured agent
+- `parallel`, `invariant-auditor`, and `docs-curator` are opt-in. `ship` is
+  not: push and open a pull request without asking once the work is verified,
+  and leave merging to the user. Do not launch the review commands on the
+  user's behalf. A configured agent
   is available, not authorization to spend on an audit.
 - Codex subagents share the checkout unless assigned an actual worktree.
   For authorized parallel work, create isolated worktrees, assign absolute
@@ -132,8 +134,8 @@ worth carrying forward. Commit each coherent, reversible step before lengthy
 verification or the next large phase; then verify it and commit any fixes.
 Do not collect a whole refactor into an uncommitted batch while waiting for the
 full gate. Use a conventional subject and an extended body explaining why.
-Pushing and opening a PR use
-`ship` when requested. State what changed, what was verified, and limitations.
+Push and open the PR with `ship` once the work is verified, without asking;
+merging is the user's. State what changed, what was verified, and limitations.
 
 ## Cloud environments
 

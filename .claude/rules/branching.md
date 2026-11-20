@@ -41,9 +41,10 @@ Reasoning: [`docs/agents/working.md`](../../docs/agents/working.md) § "Starting
   before running the checks, so the evidence describes the commit that will actually
   merge.
 
-- **Pushing and opening a pull request are `/ship`.** Invoking that skill is the
-  approval for everything in it. Reviewing is not part of it — `/code-review` is a
-  separate command the user runs. `git push -f` and the direct `git push … main` forms
+- **Pushing and opening a pull request are `/ship`, which an agent runs without asking
+  once the work is verified.** The project's standing approval covers everything in
+  it. Merging and reviewing are not part of it: the user merges, and `/code-review` is
+  a separate command the user runs. `git push -f` and the direct `git push … main` forms
   are denied by matcher, and GitHub's ruleset refuses a non-fast-forward to `main`
   server-side besides. An ordinary push does not prompt and merging to `main` does.
   Check the branch yourself rather than trusting either to catch it.
