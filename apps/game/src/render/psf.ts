@@ -7,10 +7,9 @@ import {
   NodeUpdateType,
   QuadMesh,
   RenderTarget,
-  TempNode,
   Vector2,
   type WebGPURenderer,
-  type Node,
+  Node,
   type PassNode,
   type NodeBuilder,
   type NodeFrame,
@@ -45,7 +44,7 @@ const TAPS = [
 ] as const
 
 /** Threshold-free veiling glare: every octave receives an equal share of scattered energy. */
-export class PsfNode extends TempNode<'vec4'> {
+export class PsfNode extends Node<'vec4'> {
   static get type() {
     return 'PsfNode'
   }
@@ -67,7 +66,7 @@ export class PsfNode extends TempNode<'vec4'> {
   readonly upSteps = Array.from({ length: LEVELS }, () =>
     uniform(new Vector2(1, 1)),
   )
-  readonly #quad = new QuadMesh()
+  readonly #quad = new QuadMesh(this.#stages[0]!.material)
   readonly #size = new Vector2()
   readonly outputTexture = passTexture(
     this as unknown as PassNode,

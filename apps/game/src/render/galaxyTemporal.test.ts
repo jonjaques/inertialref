@@ -10,6 +10,13 @@ it('builds the physical history resolve with the real WebGL shader builder', asy
     forceWebGL: true,
     canvas: { width: 64, height: 48 } as HTMLCanvasElement,
   })
+  // r187's builder shares a bind group through `renderer._bindings` and skips
+  // that only when the field is `undefined`. Before `init()` it is `null`, so
+  // a builder over a renderer that never initialized throws in
+  // `getSharedBindGroup`. Sharing dedupes bind groups between draws, and
+  // this test asks only whether the fallback's GLSL builds.
+  const internals = renderer as unknown as { _bindings: unknown }
+  if (internals._bindings === null) internals._bindings = undefined
   const failures: unknown[] = []
   const compiled: string[] = []
   // The concrete backends expose this factory, but their shared declaration

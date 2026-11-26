@@ -1147,21 +1147,15 @@ export class CloudFarAtlas implements CloudFarField {
     const block = farBlock(this.#next)
     const target = this.#target
     target.scissor.set(block.x, block.y, block.width, block.height)
-    target.scissorTest = true
-    try {
-      runQuadPasses(
-        renderer,
-        this.#quad,
-        // Each block replaces the texels it covers and no others: a clear
-        // would erase every block before it, since a load clear ignores the
-        // scissor, and three reads the scissor's enable from the renderer and
-        // its rectangle from the target.
-        { linear: true, autoClear: false, scissor: true },
-        (draw) => draw(this.#label, target, this.#material),
-      )
-    } finally {
-      target.scissorTest = false
-    }
+    runQuadPasses(
+      renderer,
+      this.#quad,
+      // Each block replaces the texels it covers and no others: a clear
+      // would erase every block before it, since a load clear ignores the
+      // scissor.
+      { linear: true, autoClear: false, scissor: true },
+      (draw) => draw(this.#label, target, this.#material),
+    )
     this.#next = (this.#next + 1) % FAR_CYCLE
     if (this.#due > 0) this.#due -= 1
   }

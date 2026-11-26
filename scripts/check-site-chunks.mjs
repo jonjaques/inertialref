@@ -31,11 +31,13 @@ const dist = join(root, 'apps/game/dist')
  * startup and its worker. A change to it is a decision about what every
  * visit downloads, so it is stated here rather than read off the build:
  * update it with the reason in the commit, and look at what moved. It is
- * the 56 chunks reached from `client`, `Root`, `App` and the worker, and the
+ * the 57 chunks reached from `client`, `Root`, `App` and the worker, and the
  * two more that `clientStartup` and `catalogAsset` bring, which the loader
- * imports on every boot.
+ * imports on every boot. One of the 57 is `rolldown-runtime`, the bundler's
+ * module runtime, which the Rolldown under Astro 7.4.13 splits out of `Root`
+ * into a chunk of its own: no module of ours moved.
  */
-const GAME_PAGE_CHUNKS = 58
+const GAME_PAGE_CHUNKS = 59
 
 /** What `runtimeLoader.ts` imports on every boot, through `import()`. */
 const LOADER = 'apps/game/src/runtimeLoader.ts'

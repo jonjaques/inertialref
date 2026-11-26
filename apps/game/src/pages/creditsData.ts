@@ -45,9 +45,9 @@ export const SOFTWARE_CREDITS: readonly SoftwareCredit[] = [
   {
     name: 'Takram three-geospatial and three-atmosphere',
     authors: 'Shota Matsuda and John Fewell',
-    url: 'https://github.com/johnfewell/three-geospatial/releases/tag/fork-release-7',
+    url: 'https://github.com/johnfewell/three-geospatial/releases/tag/fork-release-8',
     license: 'MIT',
-    use: 'Fewell’s release 7 adds four-lane ray–sphere intersections, fixes the atmospheric scattering kernels for Three.js r186 and marks the fork in both packages. InertialRef vendors the geospatial release tarball unchanged.',
+    use: 'Fewell’s release 8 adds four-lane ray–sphere intersections, fixes the atmospheric scattering kernels for Three.js r186, declares its types against r187 and marks the fork in both packages. InertialRef vendors the geospatial release tarball unchanged.',
     packages: ['@takram/three-geospatial', '@takram/three-atmosphere'],
   },
   {
@@ -165,7 +165,7 @@ export const SOFTWARE_CREDITS: readonly SoftwareCredit[] = [
     url: 'https://github.com/withastro/astro',
     license: 'MIT',
     use: 'Static pages and the browser code that hydrates the game shell.',
-    packages: ['astro', '@astrojs/react'],
+    packages: ['astro', '@astrojs/react', '@astrojs/react-renderer'],
   },
   {
     name: 'Vite browser helpers',

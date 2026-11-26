@@ -6,6 +6,7 @@ import {
   LinearFilter,
   type Node,
   RGBAFormat,
+  type TextureNode,
   type UniformNode,
 } from 'three/webgpu'
 import { clamp, float, max, texture, uniform, vec2 } from 'three/tsl'
@@ -136,7 +137,7 @@ export class CloudProfile {
    * that first needs it.
    */
   pool: WorkerPool | null = null
-  readonly #table: ReturnType<typeof texture>
+  readonly #table: TextureNode
   readonly #data: Uint16Array
   /** What each slot's level holds: its spec's key, so an unchanged weather uploads nothing. */
   readonly #held: (string | null)[] = [null, null, null, null, null, null]

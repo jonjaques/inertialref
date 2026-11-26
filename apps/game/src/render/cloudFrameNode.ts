@@ -1,11 +1,10 @@
 import { getLogger } from '@inertialref/shared'
 import {
-  type Node,
+  Node,
   type NodeFrame,
   NodeUpdateType,
   type Renderer,
   type RenderTarget,
-  TempNode,
   type WebGPURenderer,
 } from 'three/webgpu'
 import { float } from 'three/tsl'
@@ -104,7 +103,7 @@ export interface CloudFrameDriver {
   failed(): void
 }
 
-export class CloudFrameNode extends TempNode<'float'> {
+export class CloudFrameNode extends Node<'float'> {
   static get type(): string {
     return 'CloudFrameNode'
   }

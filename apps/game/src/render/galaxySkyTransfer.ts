@@ -9,30 +9,33 @@ import {
 } from 'three/webgpu'
 import { invariant } from '@inertialref/shared'
 
-/** Read the six native cube faces without keeping backend row padding. */
+/** Read the six native cube faces, each a tight half-float RGBA array. */
 export async function readGalaxyCube(
   renderer: WebGPURenderer,
   target: CubeRenderTarget,
 ): Promise<readonly Uint16Array[]> {
   const size = target.width
-  const stride = Math.ceil((size * 8) / 256) * 128
-  const faces = []
   // Submit each copy before awaiting it. The GPU orders all copies before a
   // later render can reuse this slot; a retired target cannot mix generations.
   const reads = Array.from({ length: 6 }, (_, face) =>
     renderer.readRenderTargetPixelsAsync(target, 0, 0, size, size, 0, face),
   )
-  for (const padded of await Promise.all(reads)) {
+  const faces = await Promise.all(reads)
+  // three strips WebGPU's 256-byte row alignment from a readback, so a face
+  // is tight. The length is checked, not trusted: a padded face is longer
+  // whenever a row is not already 256 bytes, which at 8 bytes a texel is
+  // every size but a multiple of 32.
+  return faces.map((face) => {
     invariant(
-      padded instanceof Uint16Array,
+      face instanceof Uint16Array,
       'Galaxy archive requires half-float cube faces',
     )
-    const face = new Uint16Array(size * size * 4)
-    for (let y = 0; y < size; y++)
-      face.set(padded.subarray(y * stride, y * stride + size * 4), y * size * 4)
-    faces.push(face)
-  }
-  return faces
+    invariant(
+      face.length === size * size * 4,
+      'Galaxy archive faces must read back tight',
+    )
+    return face
+  })
 }
 
 /** Upload physical half floats into a renderer-owned cube; no shader or exposure. */

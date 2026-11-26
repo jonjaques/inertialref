@@ -1,16 +1,15 @@
 /*
  * `scheduler.yield()` for the browsers that have none.
  *
- * three's `compileAsync` builds what it queued one object at a time and yields
- * between them through `yieldToMain()` — `self.scheduler.yield()` where it
- * exists and a `requestAnimationFrame` otherwise — and `NodeBuilder.buildAsync`
- * yields the same way after every shader stage, nine times per fresh
- * material. Safari 26 has WebGPU and no `scheduler` at all; Chrome has had
- * `scheduler.postTask` since 94 and `yield` only since 129. On the fallback
- * every yield is a frame: a visible boot pays ten frames per material it
- * warms, and a hidden tab pays forever, because Chrome suspends animation
- * frames for an occluded window and boot is designed to finish in one
- * (`warmup.ts` § `framesPossible`) — the cover never lifts.
+ * three's `compileAsync` builds what it queued and yields after every 8 ms of
+ * it through its `CompileScheduler`. On a visible page that waits for the
+ * next frame, with a 100 ms timeout behind it; on a hidden one it is
+ * `yieldToMain()` — `self.scheduler.yield()` where it exists and a
+ * `requestAnimationFrame` otherwise. Safari 26 has WebGPU and no `scheduler`
+ * at all; Chrome has had `scheduler.postTask` since 94 and `yield` only since
+ * 129. On the fallback a hidden tab pays forever, because the browser
+ * suspends animation frames for a hidden page and boot is designed to finish
+ * in one (`warmup.ts` § `framesPossible`) — the cover never lifts.
  *
  * A `MessageChannel` round trip is the yield. One macrotask, like the native
  * one; not clamped to a millisecond the way a nested `setTimeout` is, and not

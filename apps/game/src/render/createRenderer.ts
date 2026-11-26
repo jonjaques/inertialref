@@ -15,7 +15,6 @@ import {
   type RendererDescription,
   resolveOutputMode,
 } from './output.ts'
-import { installSceneOrder } from './sceneOrder.ts'
 import { installPassTimeline } from './passTimeline.ts'
 import { createCanvasGamut, type CanvasGamut } from './gamut.ts'
 import {
@@ -223,7 +222,6 @@ async function buildRenderer(
   }
   try {
     await renderer.init()
-    installSceneOrder(renderer)
     stopTimeline = installPassTimeline(renderer)
     if (runtimeFailure.getSnapshot() !== null) {
       throw new Error('Graphics startup was canceled.')

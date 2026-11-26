@@ -62,9 +62,9 @@ const supplements = {
   '@react-dnd/invariant@4.0.2': 'react-dnd-invariant-4.0.2.LICENSE',
   '@react-dnd/shallowequal@4.0.2': 'react-dnd-shallowequal-4.0.2.LICENSE',
   '@react-three/fiber@9.8.2': 'react-three-fiber-9.8.2.LICENSE',
-  '@takram/three-atmosphere@0.19.1+fork.7':
+  '@takram/three-atmosphere@0.19.1+fork.8':
     '../takram-three-geospatial.LICENSE',
-  '@takram/three-geospatial@0.9.1+fork.7': '../takram-three-geospatial.LICENSE',
+  '@takram/three-geospatial@0.9.1+fork.8': '../takram-three-geospatial.LICENSE',
   'change-case@5.4.4': 'change-case-5.4.4.LICENSE',
   'map-obj@5.0.2': 'map-obj-5.0.2.LICENSE',
   'snakecase-keys@9.0.2': 'snakecase-keys-9.0.2.LICENSE',

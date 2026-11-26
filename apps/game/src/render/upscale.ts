@@ -6,7 +6,6 @@ import {
   LinearFilter,
   NodeUpdateType,
   RGBAFormat,
-  TempNode,
   Vector2,
   type Camera,
   type NodeBuilder,
@@ -15,6 +14,7 @@ import {
   type Texture,
   type TextureNode,
   type WebGPURenderer,
+  Node,
 } from 'three/webgpu'
 import { passTexture, velocity } from 'three/tsl'
 import { getLogger } from '@inertialref/shared'
@@ -132,7 +132,7 @@ function durations(samples: readonly unknown[]): OwnedSample[] {
  * The sensor schedules the library's raw kernels once per render call. Keeping
  * jitter outside the graph lets the sensor restore the camera after a throw.
  */
-export class UpscaleNode extends TempNode<'vec4'> {
+export class UpscaleNode extends Node<'vec4'> {
   static get type() {
     return 'UpscaleNode'
   }

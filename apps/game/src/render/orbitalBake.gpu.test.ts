@@ -169,7 +169,7 @@ it('draws a cube face by face into the same six faces `CubeCamera.update` draws'
   material.colorNode = normalize(positionWorld).mul(0.5).add(0.5)
   const scene = new Scene()
   scene.add(new Mesh(new SphereGeometry(1, 32, 16), material))
-  // Sixteen float texels are 256 bytes, so a row reads back unpadded.
+  // Sixteen float texels are 256 bytes, a row WebGPU pads nothing onto.
   const cube = () =>
     new CubeRenderTarget(16, { type: FloatType, generateMipmaps: false })
   const whole = cube()

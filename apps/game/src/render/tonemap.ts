@@ -1,9 +1,4 @@
-import {
-  CustomToneMapping,
-  type Node,
-  type Renderer,
-  type ToneMapping,
-} from 'three/webgpu'
+import { CustomToneMapping, type Node, type Renderer } from 'three/webgpu'
 import {
   clamp,
   colorSpaceToWorking,
@@ -238,12 +233,15 @@ export function installToneCurve(
       )
   })
 
-  // `@types/three` declares `NodeLibrary` as an empty class; the method is
-  // there at runtime, in `renderers/common/nodes/NodeLibrary.js`.
-  const library = renderer.library as {
-    addToneMapping(curve: typeof toneCurve, toneMapping: ToneMapping): void
-  }
-  library.addToneMapping(toneCurve, CustomToneMapping)
+  // `NodeLibrary.addToneMapping` is typed over bare `Node` parameters, and a
+  // curve whose parameters are typed is not assignable to that. The library
+  // calls it with the vec3 color and the float exposure the curve declares.
+  renderer.library.addToneMapping(
+    toneCurve as unknown as Parameters<
+      Renderer['library']['addToneMapping']
+    >[0],
+    CustomToneMapping,
+  )
   selectToneCurve(renderer)
 
   const controls = {
@@ -278,20 +276,22 @@ export function selectToneCurve(renderer: Renderer): void {
  * below, solved for its input. It is a quadratic, and the positive root is the
  * one on the curve. The neutral look feeds the fit `y / 0.6`, hence the 0.6.
  */
-const shoulderLuminance = /*@__PURE__*/ Fn(([shoulder]: [Node<'float'>]) => {
-  const a = float(1).sub(shoulder.mul(0.983729))
-  const b = float(0.0245786).sub(shoulder.mul(0.983729 * 0.432951))
-  const c = shoulder.mul(0.238081).add(0.000090537).negate()
-  const root = b
-    .negate()
-    .add(sqrt(b.mul(b).sub(a.mul(c).mul(4))))
-    .div(a.mul(2))
-  return root.mul(0.6)
-})
+export const shoulderLuminance = /*@__PURE__*/ Fn(
+  ([shoulder]: [Node<'float'>]) => {
+    const a = float(1).sub(shoulder.mul(0.983729))
+    const b = float(0.0245786).sub(shoulder.mul(0.432951))
+    const c = shoulder.mul(0.238081).add(0.000090537).negate()
+    const root = b
+      .negate()
+      .add(sqrt(b.mul(b).sub(a.mul(c).mul(4))))
+      .div(a.mul(2))
+    return root.mul(0.6)
+  },
+)
 
 /** The ACES RRT + ODT rational fit. Source: selfshadow/ltc_code `ltc_blit.fs`. */
-const rrtAndOdtFit = /*@__PURE__*/ Fn(([color]: [Node<'vec3'>]) => {
+export const rrtAndOdtFit = /*@__PURE__*/ Fn(([color]: [Node<'vec3'>]) => {
   const a = color.mul(color.add(0.0245786)).sub(0.000090537)
-  const b = color.mul(color.add(0.432951).mul(0.983729)).add(0.238081)
+  const b = color.mul(color.mul(0.983729).add(0.432951)).add(0.238081)
   return a.div(b)
 })

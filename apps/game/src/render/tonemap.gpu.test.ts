@@ -5,9 +5,9 @@ import {
   CustomToneMapping,
   LinearSRGBColorSpace,
 } from 'three/webgpu'
-import { renderOutput, uniform, vec3, vec4 } from 'three/tsl'
+import { float, renderOutput, uniform, vec3, vec4 } from 'three/tsl'
 import { openGpu, type GpuSession } from './gpuHarness.ts'
-import { installToneCurve } from './tonemap.ts'
+import { installToneCurve, rrtAndOdtFit, shoulderLuminance } from './tonemap.ts'
 
 let gpu: GpuSession
 beforeAll(async () => {
@@ -68,6 +68,20 @@ it('keeps Natural equal to the production ACES fit at SDR headroom', async () =>
         production.at(20, 20)[channel]!,
         6,
       )
+  }
+})
+
+it('solves the fit for the luminance that grades to a shoulder', async () => {
+  // The shoulder's start is the fit's own inverse: the neutral look feeds the
+  // fit y / 0.6, so a luminance solved for a shoulder grades back to it. A
+  // coefficient that drifts between the fit and the solve moves the ramp.
+  for (const shoulder of [0.05, 0.3, 0.6, 0.9, 0.98]) {
+    const start = shoulderLuminance(float(shoulder))
+    const graded = await gpu.drawGraph(
+      vec4(rrtAndOdtFit(vec3(start.div(0.6))), 1),
+      { float: true },
+    )
+    expect(graded.at(20, 20)[0]).toBeCloseTo(shoulder, 5)
   }
 })
 

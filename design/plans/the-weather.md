@@ -899,9 +899,11 @@ this plan's to spend.
   emits no f16 by reading of its source, untested, so the M5's doubled f16
   rate may be out of reach without `wgslFn`; an MRT holds 32 bytes a sample
   unless `requiredLimits` asks for more; a post-process quad's camera nodes
-  describe the quad's camera; and reversed depth reverses the draw list,
-  which a composite drawn as a scene object must survive. Compile-ahead goes
-  through `warmCompile`.
+  describe the quad's camera. Under reversed depth r187 keeps authored
+  `renderOrder` and negates only the depth key, so a composite drawn as a
+  scene object is placed by its `renderOrder` as written (ADR-0075); the
+  maps under `weather/maps/` read r185, which reversed the whole list.
+  Compile-ahead goes through `warmCompile`.
 - **Taste.** Eroded noise reads as cauliflower before it reads as cloud, and
   no number catches that. The look council's blind protocol, against
   photographs, is the instrument ([look council](look-council.md)).

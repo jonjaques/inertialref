@@ -26,9 +26,10 @@ ADR or the build log and the item here goes.
 he names only sometimes: the noise figures are an Apple M3's, and no trace
 timing names its machine. Nothing in this plan is measured by us unless it
 says so. A state ("merged", "open", "fork only") was read from GitHub on
-16 Nov 2026. The game pins three 0.185.1; three's releases are r185 (1 Jul
-2026), r186 (24 Sep) and r187 (30 Oct), and r188 is unreleased, so "merged
-for r188" means on `dev` and in no release.
+16 Nov 2026. The game runs three 0.187.0 with one fix merged for r188
+patched in ([ADR-0075](../../docs/adr/0075-three-r187.md)); three's releases
+are r185 (1 Jul 2026), r186 (24 Sep) and r187 (30 Oct), and r188 is
+unreleased, so "merged for r188" means on `dev` and in no release.
 
 ---
 
@@ -253,7 +254,7 @@ result is added to an image that already reflected the environment. Under that
 contract the ambient term and the fill light are additive writers the cube
 replaces, not lights it sits under.
 
-**The route on 0.185 is a node on `scene.environmentNode`.** His two traps
+**The route on 0.187 is a node on `scene.environmentNode`.** His two traps
 bind it: the query arrives as overrides of the sample's coordinates and level,
 so a node that reads our tables samples them with explicit coordinates and an
 explicit level; and the two lobes cannot be told apart there. His own
@@ -272,13 +273,13 @@ it, and the hull's cost on `ir.gpu` moves by under 0.3 ms at 1920 × 1080.
 his series lands: an in-browser unwrapper, a lightmap baker with an "indirect
 only" mode, ray-traced radiosity, an SVGF denoiser, seam stitching, a probe
 grid re-captured a few probes a frame. Radiosity, the denoiser and seam
-stitching are merged for r188; the probe grid in 0.185.1 is WebGL-only; local
+stitching are merged for r188; the probe grid in 0.187.0 is WebGL-only; local
 reflection probes are a draft. A bake is regenerable, so it is made on entry
 from the station's geometry and nothing is persisted (rule 15).
 
 ## 7. Materials
 
-- **Do not use `bumpMap` on three 0.185.1.** Its bump node normalizes the
+- **Do not use `bumpMap` on three 0.187.0.** Its bump node normalizes the
   position derivatives, so relief changes strength with camera distance, with
   device pixel ratio and with viewing angle. A cinematic shot here moves from
   kilometers to meters, and reconstruction changes the render scale, so both
@@ -303,15 +304,16 @@ from the station's geometry and nothing is persisted (rule 15).
 
 ## 8. The three.js ladder
 
-The game is two releases behind, and the port's every release since alpha.7
-requires r187. The upgrade is shared with [the clouds](the-clouds.md), phase B.
+The game is on r187, the release the cloud port requires, with upstream's
+`compileAsync` rewrite patched in until r188 ships it. What the step to r187
+moved, and why, is [ADR-0075](../../docs/adr/0075-three-r187.md).
 
-| Step      | Brings                                                                                                                                                                                                                                                                                                | Breaks or moves                                                                                                                                                            |
-| --------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| r186      | GPU-run unit tests of TSL itself ([#34331](https://github.com/mrdoob/three.js/pull/34331)), and the five fixes they led to, merged before it: to `gain` and `pcurve`, `sinc`, `rotate`, `determinant` and `faceForward`. `CountingSort`, an O(N) GPU sort and compaction. Packed integer dot products | `MaterialXNoise.js` is rewritten, and `render/materials.ts` draws the star's granulation with two of its functions: the dark plates move first, so `presets:compare --all` |
-| r187      | The port from alpha.7, and alpha.9's fixes to the temporal upscale                                                                                                                                                                                                                                    | Not surveyed. The upgrade's own pull request reads the migration notes for 186 and 187                                                                                     |
-| r188      | The noise of §2, the SVGF denoiser, radiosity, seam stitching. Open against it: octahedral normals, the bump fixes, reflection probes                                                                                                                                                                 | `DenoiseNode` is replaced; `bumpScale` becomes a length if #35330 merges. The game sets neither today                                                                      |
-| Fork only | The depth pyramid, the joint bilateral upsample, the list of indirect sources, coverage through the denoiser                                                                                                                                                                                          | A vendored file is not followed by an upgrade. Each names its pull request, and is deleted when a release carries it                                                       |
+| Step      | Brings                                                                                                                                                                                                                                                                                                        | Breaks or moves                                                                                                                                                                                                                                                                         |
+| --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| r186      | Landed. GPU-run unit tests of TSL itself ([#34331](https://github.com/mrdoob/three.js/pull/34331)), and the five fixes they led to, merged before it: to `gain` and `pcurve`, `sinc`, `rotate`, `determinant` and `faceForward`. `CountingSort`, an O(N) GPU sort and compaction. Packed integer dot products | `MaterialXNoise.js` is rewritten under the star's granulation; no plate singles it out                                                                                                                                                                                                  |
+| r187      | Landed. The port from alpha.7, and alpha.9's fixes to the temporal upscale. Every cloud preset compiles on its own first frame                                                                                                                                                                                | `compileAsync` is not reentrant ([#35315](https://github.com/mrdoob/three.js/issues/35315); patched, #35359); a `compute(count)` kernel refuses a size; readbacks are tight; the scissor flag is the target's; the draw list is not reversed; the ACES fit is Hill's. ADR-0075 has each |
+| r188      | The noise of §2, the SVGF denoiser, radiosity, seam stitching, and #35359, whose patch it deletes. Open against it: octahedral normals, the bump fixes, reflection probes                                                                                                                                     | `DenoiseNode` is replaced; `bumpScale` becomes a length if #35330 merges. The game sets neither today. The port pins `<0.188.0`, so r188 waits on its release too                                                                                                                       |
+| Fork only | The depth pyramid, the joint bilateral upsample, the list of indirect sources, coverage through the denoiser                                                                                                                                                                                                  | A vendored file is not followed by an upgrade. Each names its pull request, and is deleted when a release carries it                                                                                                                                                                    |
 
 The game imports none of the six functions r186 fixes: a search of
 `apps/game/src` and `packages/*/src` for their imports from `three/tsl` finds
@@ -420,7 +422,7 @@ owner's to take or leave:
 
 | #   | Item                                                                                               | Why here                                                              |
 | --- | -------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
-| 1   | three 0.187, with the port at alpha.9 (§8)                                                         | Everything else is easier to borrow two releases closer to his code   |
+| 1   | Landed: three 0.187, with the port at alpha.9 (§8, ADR-0075)                                       | Everything else is easier to borrow two releases closer to his code   |
 | 2   | The instruments: the sea's hit share (§5), the named-features device test and the bytes table (§9) | Each is a day, changes no picture, and decides whether 5 and 7 exist  |
 | 3   | The hull's environment (§6)                                                                        | The one place his survey finds nothing where every game has something |
 | 4   | The mip bias experiment (§3, rule 15) and the sea's bump look (§7)                                 | Two plates each                                                       |

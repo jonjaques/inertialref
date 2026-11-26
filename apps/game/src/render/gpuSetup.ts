@@ -71,15 +71,20 @@ Object.defineProperty(globalThis, 'self', {
 })
 
 /*
- * 3. `scheduler.yield`, so a compile can breathe without a frame.
+ * 3. `scheduler.yield`, so a yield through `yieldToMain()` is not a frame.
  *
- * `compileAsync` builds the queued pipelines one object at a time and yields
- * between them through `yieldToMain()`, which takes `self.scheduler.yield()`
- * when it exists and `requestAnimationFrame` otherwise — and the frame above
- * never fires, so without this every compile that walks anything hangs after
- * its first object. Node has the same API in `timers/promises`; installing it
- * keeps the frame stub honest (still no frame, still one `nodeFrame`) while a
- * yield is what it says, one macrotask.
+ * `yieldToMain()` takes `self.scheduler.yield()` when it exists and
+ * `requestAnimationFrame` otherwise, and the frame above never fires, so
+ * without this a yield through it never resolves. Node has the same API in
+ * `timers/promises`; installing it keeps the frame stub honest (still no
+ * frame, still one `nodeFrame`) while a yield is what it says, one macrotask.
+ *
+ * `compileAsync` and `compileComputeAsync` do not reach it here. Their
+ * `CompileScheduler` yields after every 8 ms of building, and wherever
+ * `requestAnimationFrame` exists and no document says it is hidden, it waits
+ * for the next frame with a 100 ms timeout behind it. This suite has the stub
+ * and no document, so every such yield of a compile here is the timeout:
+ * 100 ms for each 8 ms of building.
  */
 Object.assign(globalThis, { scheduler })
 

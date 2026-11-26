@@ -40,6 +40,7 @@ import {
   vec3,
 } from 'three/tsl'
 import { disposeAttributes } from './disposeAttributes.ts'
+import { dispatch } from './dispatch.ts'
 
 interface Sources {
   readonly positions: readonly UniverseVector[]
@@ -416,7 +417,7 @@ export function createStarProjection(
       ) {
         if (compute) {
           renderer.compute(clear!)
-          renderer.compute(reduce!, count.value)
+          dispatch(renderer, reduce!, count.value)
           reductions++
         } else if (changed || heldObserver === null) {
           let maximum = 0

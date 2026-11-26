@@ -11,7 +11,7 @@ import {
   Matrix3,
   Mesh,
   MeshBasicNodeMaterial,
-  type Node,
+  Node,
   type NodeFrame,
   NodeMaterial,
   NodeUpdateType,
@@ -28,7 +28,6 @@ import {
   SphereGeometry,
   StorageBufferAttribute,
   StorageTexture,
-  TempNode,
   type Texture,
   UnsignedByteType,
   Vector2,
@@ -76,6 +75,10 @@ import {
 import { createAtmosphereMaterial } from './materials.ts'
 import { createPlanetMaterial } from './planet.ts'
 import { runQuadPasses } from './quadPass.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+import { warmTargetFor } from './sceneTarget.ts'
+import { sensorMrt } from './sensorMrt.ts'
 import { createTerrainMaterial } from './terrain.ts'
 import { warmCompute, warmSensorPass } from './warmup.ts'
 import { createWaterMaterial } from './water.ts'
@@ -197,7 +200,7 @@ async function texels(
  * object whose material holds it: the frame node's shape, and the over
  * pass's.
  */
-class Before extends TempNode<'float'> {
+class Before extends Node<'float'> {
   static get type(): string {
     return 'PremiseBefore'
   }
@@ -261,7 +264,7 @@ describe('a RenderTarget3D slice', () => {
       const value = uniform(0)
       const material = new NodeMaterial()
       material.fragmentNode = vec4(value, value, 0, 1)
-      const quad = new QuadMesh()
+      const quad = new QuadMesh(material)
       const before = gpu.pipelinesBuilt()
       await checked(() =>
         warmSensorPass(renderer, quad, [{ target: volume, material }]),
@@ -312,7 +315,7 @@ describe('a 2D-array MRT target', () => {
       premise2: vec4(0.6, layer, 0, 1),
       premise3: vec4(0.8, layer, 0, 1),
     })
-    const quad = new QuadMesh()
+    const quad = new QuadMesh(material)
     const before = gpu.pipelinesBuilt()
     await checked(() =>
       warmSensorPass(renderer, quad, [{ target: maps, material }]),
@@ -385,7 +388,7 @@ function nested(
   })().compute(16)
   const nestedMaterial = new NodeMaterial()
   nestedMaterial.fragmentNode = texture(storageMap, uv())
-  const nestedQuad = new QuadMesh()
+  const nestedQuad = new QuadMesh(nestedMaterial)
   const seen = { context: false, target: false, runs: 0 }
   const frameNode = new Before((three) => {
     const context = (three as unknown as Internals)._currentRenderContext
@@ -860,7 +863,21 @@ describe('a table on the air’s bundle that no graph reads', () => {
         (child) => child.name === 'cloud composite',
       )!
       composite.visible = true
-      const drawn = await gpu.shader(composite, rig.camera, rig.scene)
+      // Asked for against what pass B draws it into: the scene pass's
+      // target and outputs. With nothing bound the composite's outputs
+      // match no attachment, and its program is one no device takes.
+      const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))
+      const target = renderer.getRenderTarget()
+      const mrt = renderer.getMRT()
+      renderer.setRenderTarget(warmTargetFor(renderer, layout))
+      renderer.setMRT(sensorMrt(layout))
+      let drawn: { vertexShader: string; fragmentShader: string }
+      try {
+        drawn = await gpu.shader(composite, rig.camera, rig.scene)
+      } finally {
+        renderer.setMRT(mrt)
+        renderer.setRenderTarget(target)
+      }
       return {
         // `materials.ts`, `planet.ts`, `terrain.ts`, `water.ts`.
         shell: await programOf(

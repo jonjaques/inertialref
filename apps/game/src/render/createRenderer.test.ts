@@ -145,12 +145,11 @@ it('uses a capable WebGL fallback in standard output', async () => {
       .reversedDepthBuffer,
   ).toBe(false)
   const renderer = mock.ready.mock.calls[0]?.[0].renderer
-  expect(renderer.setOpaqueSort).toHaveBeenCalledExactlyOnceWith(
-    expect.any(Function),
-  )
-  expect(renderer.setTransparentSort).toHaveBeenCalledExactlyOnceWith(
-    expect.any(Function),
-  )
+  // Three's own painter sorts: r187 negates the depth key for a reversed
+  // camera itself and keeps authored order, so a sort that compensates for a
+  // reversal inverts the order it means to keep.
+  expect(renderer.setOpaqueSort).not.toHaveBeenCalled()
+  expect(renderer.setTransparentSort).not.toHaveBeenCalled()
   // Three's own timestamp tracking is off from construction, the option its
   // backend reads once at init: `ir.passes` times every pass with a query set
   // of its own.

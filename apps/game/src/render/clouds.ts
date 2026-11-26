@@ -14,14 +14,13 @@ import {
   Matrix4,
   Mesh,
   MeshBasicNodeMaterial,
-  type Node,
+  Node,
   type NodeFrame,
   NodeUpdateType,
   OneFactor,
   OneMinusSrcAlphaFactor,
   PlaneGeometry,
   Scene,
-  TempNode,
   Vector2,
   Vector3,
   type WebGPURenderer,
@@ -175,7 +174,7 @@ function compositeOver(material: MeshBasicNodeMaterial): void {
  * The frame's term in the sensor's dependency sum: the depth copy, then the
  * composite's form. `vec4(0)` in the post program, there for its order.
  */
-class CloudsOverNode extends TempNode<'vec4'> {
+class CloudsOverNode extends Node<'vec4'> {
   static get type(): string {
     return 'CloudsOverNode'
   }

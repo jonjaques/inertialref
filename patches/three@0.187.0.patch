@@ -1,0 +1,2824 @@
+diff --git a/build/three.tsl.js b/build/three.tsl.js
+index 7c8d2322834904c1247c79cda31beff8e2bfc497..3d58f78181b96cde0845480cdfbcfd03ea64ed5f 100644
+--- a/build/three.tsl.js
++++ b/build/three.tsl.js
+@@ -31884,12 +31884,14 @@ class PassNode extends Node {
+ 
+ 		if ( this.contextNode !== null ) renderer.contextNode = this._getContextNode( renderer );
+ 
+-		await renderer.compileAsync( this.scene, this.camera );
++		const promise = renderer.compileAsync( this.scene, this.camera );
+ 
+ 		renderer.setRenderTarget( currentRenderTarget );
+ 		renderer.setMRT( currentMRT );
+ 		renderer.contextNode = currentContextNode;
+ 
++		await promise;
++
+ 	}
+ 
+ 	setup( { renderer } ) {
+diff --git a/build/three.webgpu.js b/build/three.webgpu.js
+index f8fc49fe7df98cbac4609603a1f2a2c6aea79675..539dcf907e5b9170ea8e9f6cb375759a8055b5c7 100644
+--- a/build/three.webgpu.js
++++ b/build/three.webgpu.js
+@@ -16099,70 +16099,6 @@ class NodeBuilder {
+ 
+ 	}
+ 
+-	/**
+-	 * Async version of build() that yields to main thread between shader stages.
+-	 * Use this in compileAsync() to prevent blocking the main thread.
+-	 *
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread.
+-	 * @return {Promise<NodeBuilder>} A promise that resolves to this node builder.
+-	 */
+-	async buildAsync( yieldFn = yieldToMain ) {
+-
+-		this.prebuild();
+-
+-		// setup() -> stage 1: create possible new nodes and/or return an output reference node
+-		// analyze()   -> stage 2: analyze nodes to possible optimization and validation
+-		// generate()  -> stage 3: generate shader
+-
+-		for ( const buildStage of defaultBuildStages ) {
+-
+-			this.setBuildStage( buildStage );
+-
+-			if ( this.context.position && this.context.position.isNode ) {
+-
+-				this.flowNodeFromShaderStage( 'vertex', this.context.position );
+-
+-			}
+-
+-			for ( const shaderStage of shaderStages ) {
+-
+-				this.setShaderStage( shaderStage );
+-
+-				const flowNodes = this.flowNodes[ shaderStage ];
+-
+-				for ( const node of flowNodes ) {
+-
+-					if ( buildStage === 'generate' ) {
+-
+-						this.flowNode( node );
+-
+-					} else {
+-
+-						node.build( this );
+-
+-					}
+-
+-				}
+-
+-				// Yield to main thread after each shader stage to prevent blocking
+-				await yieldFn();
+-
+-			}
+-
+-		}
+-
+-		this.setBuildStage( null );
+-		this.setShaderStage( null );
+-
+-		// stage 4: build code for a specific output
+-
+-		this.buildCode();
+-		this.buildUpdateNodes();
+-
+-		return this;
+-
+-	}
+-
+ 	/**
+ 	 * Returns a uniform representation which is later used for UBO generation and rendering.
+ 	 *
+@@ -17753,22 +17689,6 @@ class NodeManager extends DataMap {
+ 		 */
+ 		this.groupsData = new ChainMap();
+ 
+-		/**
+-		 * Queue for pending async builds to limit concurrent compilation.
+-		 *
+-		 * @private
+-		 * @type {Array<Function>}
+-		 */
+-		this._buildQueue = [];
+-
+-		/**
+-		 * Whether an async build is currently in progress.
+-		 *
+-		 * @private
+-		 * @type {boolean}
+-		 */
+-		this._buildInProgress = false;
+-
+ 		/**
+ 		 * A cache for managing node objects of
+ 		 * scene properties like fog or environments.
+@@ -17862,36 +17782,13 @@ class NodeManager extends DataMap {
+ 
+ 	}
+ 
+-	/**
+-	 * Logs an error thrown while building a node material.
+-	 *
+-	 * @private
+-	 * @param {Error} e - The build error.
+-	 */
+-	_reportBuildError( e ) {
+-
+-		let stackTrace = e.stackTrace;
+-
+-		if ( ! stackTrace && e.stack ) {
+-
+-			// Capture stack trace for JavaScript errors
+-
+-			stackTrace = new StackTrace( e.stack );
+-
+-		}
+-
+-		error( 'TSL: ' + e, stackTrace );
+-
+-	}
+-
+ 	/**
+ 	 * Returns a node builder state for the given render object.
+ 	 *
+ 	 * @param {RenderObject} renderObject - The render object.
+-	 * @param {?Function} [yieldFn=null] - If set, the build is async and yields to the main thread via this function.
+-	 * @return {NodeBuilderState|Promise<NodeBuilderState>} The node builder state (or Promise if async).
++	 * @return {NodeBuilderState} The node builder state.
+ 	 */
+-	getForRender( renderObject, yieldFn = null ) {
++	getForRender( renderObject ) {
+ 
+ 		const renderObjectData = this.get( renderObject );
+ 
+@@ -17907,80 +17804,34 @@ class NodeManager extends DataMap {
+ 
+ 			if ( nodeBuilderState === undefined ) {
+ 
+-				const buildNodeBuilder = async () => {
+-
+-					let nodeBuilder = this._createNodeBuilder( renderObject, renderObject.material );
++				let nodeBuilder = this._createNodeBuilder( renderObject, renderObject.material );
+ 
+-					try {
+-
+-						if ( yieldFn !== null ) {
+-
+-							await nodeBuilder.buildAsync( yieldFn );
+-
+-						} else {
+-
+-							nodeBuilder.build();
+-
+-						}
+-
+-					} catch ( e ) {
++				try {
+ 
+-						nodeBuilder = this._createNodeBuilder( renderObject, new NodeMaterial() );
++					nodeBuilder.build();
+ 
+-						if ( yieldFn !== null ) {
++				} catch ( e ) {
+ 
+-							await nodeBuilder.buildAsync( yieldFn );
++					nodeBuilder = this._createNodeBuilder( renderObject, new NodeMaterial() );
++					nodeBuilder.build();
+ 
+-						} else {
++					let stackTrace = e.stackTrace;
+ 
+-							nodeBuilder.build();
++					if ( ! stackTrace && e.stack ) {
+ 
+-						}
++						// Capture stack trace for JavaScript errors
+ 
+-						this._reportBuildError( e );
++						stackTrace = new StackTrace( e.stack );
+ 
+ 					}
+ 
+-					return nodeBuilder;
+-
+-				};
+-
+-				if ( yieldFn !== null ) {
+-
+-					return buildNodeBuilder().then( ( nodeBuilder ) => {
+-
+-						nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+-						if ( nodeBuilder.objectSpecific === false ) nodeBuilderCache.set( cacheKey, nodeBuilderState );
+-						nodeBuilderState.usedTimes ++;
+-						renderObjectData.nodeBuilderState = nodeBuilderState;
+-
+-						return nodeBuilderState;
+-
+-					} );
+-
+-				} else {
+-
+-					// Synchronous path - call buildNodeBuilder but don't await
+-					let nodeBuilder = this._createNodeBuilder( renderObject, renderObject.material );
+-
+-					try {
+-
+-						nodeBuilder.build();
+-
+-					} catch ( e ) {
++					error( 'TSL: ' + e, stackTrace );
+ 
+-						nodeBuilder = this._createNodeBuilder( renderObject, new NodeMaterial() );
+-						nodeBuilder.build();
+-
+-						this._reportBuildError( e );
+-
+-					}
+-
+-					nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
++				}
+ 
+-					if ( nodeBuilder.objectSpecific === false ) nodeBuilderCache.set( cacheKey, nodeBuilderState );
++				nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+ 
+-				}
++				if ( nodeBuilder.objectSpecific === false ) nodeBuilderCache.set( cacheKey, nodeBuilderState );
+ 
+ 			}
+ 
+@@ -17994,115 +17845,6 @@ class NodeManager extends DataMap {
+ 
+ 	}
+ 
+-	/**
+-	 * Async version of getForRender() that yields to main thread during build.
+-	 * Use this in compileAsync() to prevent blocking the main thread.
+-	 *
+-	 * @param {RenderObject} renderObject - The render object.
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread.
+-	 * @return {Promise<NodeBuilderState>} A promise that resolves to the node builder state.
+-	 */
+-	getForRenderAsync( renderObject, yieldFn = yieldToMain ) {
+-
+-		const result = this.getForRender( renderObject, yieldFn );
+-
+-		// Ensure we always return a Promise (cache hit returns nodeBuilderState directly)
+-		if ( result.then ) {
+-
+-			return result;
+-
+-		}
+-
+-		return Promise.resolve( result );
+-
+-	}
+-
+-	/**
+-	 * Returns nodeBuilderState if ready, null if pending async build.
+-	 * Queues async build on first call for cache miss.
+-	 * Use this in render() path to enable non-blocking compilation.
+-	 *
+-	 * @param {RenderObject} renderObject - The render object.
+-	 * @return {?NodeBuilderState} The node builder state, or null if still building.
+-	 */
+-	getForRenderDeferred( renderObject ) {
+-
+-		const renderObjectData = this.get( renderObject );
+-
+-		// Already built for this renderObject
+-		if ( renderObjectData.nodeBuilderState !== undefined ) {
+-
+-			return renderObjectData.nodeBuilderState;
+-
+-		}
+-
+-		// Check cache with stable key
+-		const cacheKey = this.getForRenderCacheKey( renderObject );
+-		const nodeBuilderState = this.nodeBuilderCache.get( cacheKey );
+-
+-		if ( nodeBuilderState !== undefined ) {
+-
+-			// Cache hit - use it
+-			nodeBuilderState.usedTimes ++;
+-			renderObjectData.nodeBuilderState = nodeBuilderState;
+-			return nodeBuilderState;
+-
+-		}
+-
+-		// Cache miss - check if async build already queued
+-		if ( renderObjectData.pendingBuild !== true ) {
+-
+-			// Mark as pending and add to build queue
+-			renderObjectData.pendingBuild = true;
+-
+-			this._buildQueue.push( () => {
+-
+-				return this.getForRenderAsync( renderObject ).then( () => {
+-
+-					renderObjectData.pendingBuild = false;
+-
+-				} );
+-
+-			} );
+-
+-			// Start processing queue if not already running
+-			this._processBuildQueue();
+-
+-		}
+-
+-		return null; // Not ready
+-
+-	}
+-
+-	/**
+-	 * Processes the build queue one item at a time.
+-	 * This ensures builds don't all run simultaneously and freeze the main thread.
+-	 *
+-	 * @private
+-	 */
+-	_processBuildQueue() {
+-
+-		if ( this._buildInProgress || this._buildQueue.length === 0 ) {
+-
+-			return;
+-
+-		}
+-
+-		this._buildInProgress = true;
+-
+-		const buildFn = this._buildQueue.shift();
+-
+-		buildFn().then( () => {
+-
+-			this._buildInProgress = false;
+-
+-			// Process next item in queue
+-			this._processBuildQueue();
+-
+-		} );
+-
+-	}
+-
+ 	/**
+ 	 * Deletes the given object from the internal data map
+ 	 *
+@@ -18137,11 +17879,9 @@ class NodeManager extends DataMap {
+ 	 * Returns a node builder state for the given compute node.
+ 	 *
+ 	 * @param {Node} computeNode - The compute node.
+-	 * @param {boolean} [useAsync=false] - Whether to use async build with yielding.
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread in an async build.
+-	 * @return {NodeBuilderState|Promise<NodeBuilderState>} The node builder state (or Promise if async).
++	 * @return {NodeBuilderState} The node builder state.
+ 	 */
+-	getForCompute( computeNode, useAsync = false, yieldFn = yieldToMain ) {
++	getForCompute( computeNode ) {
+ 
+ 		const computeData = this.get( computeNode );
+ 
+@@ -18156,21 +17896,6 @@ class NodeManager extends DataMap {
+ 
+ 			if ( onNodeBuilderCreated !== null ) onNodeBuilderCreated( nodeBuilder, computeNode );
+ 
+-			if ( useAsync ) {
+-
+-				return nodeBuilder.buildAsync( yieldFn ).then( () => {
+-
+-					nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+-
+-					computeData.nodeBuilderState = nodeBuilderState;
+-					computeData.version = computeNode.version;
+-
+-					return nodeBuilderState;
+-
+-				} );
+-
+-			}
+-
+ 			nodeBuilder.build();
+ 
+ 			nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+@@ -18184,28 +17909,6 @@ class NodeManager extends DataMap {
+ 
+ 	}
+ 
+-	/**
+-	 * Async version of getForCompute() that yields to main thread during build.
+-	 * Use this in compileComputeAsync() to prevent blocking the main thread.
+-	 *
+-	 * @param {Node} computeNode - The compute node.
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread.
+-	 * @return {Promise<NodeBuilderState>} A promise that resolves to the node builder state.
+-	 */
+-	getForComputeAsync( computeNode, yieldFn = yieldToMain ) {
+-
+-		const result = this.getForCompute( computeNode, true, yieldFn );
+-
+-		if ( result.then ) {
+-
+-			return result;
+-
+-		}
+-
+-		return Promise.resolve( result );
+-
+-	}
+-
+ 	/**
+ 	 * Creates a node builder state for the given node builder.
+ 	 *
+@@ -23252,9 +22955,11 @@ class Renderer {
+ 
+ 		if ( this._isDeviceLost === true ) return;
+ 
++		const precompilationState = this._getPrecompilationState();
++
+ 		if ( this._initialized === false ) await this.init();
+ 
+-		// only awaited when the drawing pipeline prepares something, so the state below is still taken synchronously
++		// only awaited when the drawing pipeline prepares something
+ 
+ 		const prepare = this.drawingPipeline.prepareAsync( scene, camera );
+ 
+@@ -23268,16 +22973,6 @@ class Renderer {
+ 
+ 		}
+ 
+-		// preserve render tree
+-
+-		const nodeFrame = this._nodes.nodeFrame;
+-
+-		const previousRenderId = nodeFrame.renderId;
+-		const previousRenderContext = this._currentRenderContext;
+-		const previousRenderObjectFunction = this._currentRenderObjectFunction;
+-		const previousHandleObjectFunction = this._handleObjectFunction;
+-		const previousCompilationPromises = this._compilationPromises;
+-
+ 		//
+ 
+ 		if ( targetScene === null ) targetScene = scene;
+@@ -23286,138 +22981,129 @@ class Renderer {
+ 		// This ensures cache keys match between compileAsync and render
+ 		const sceneRef = ( scene.isScene === true ) ? scene : ( targetScene.isScene === true ) ? targetScene : _scene;
+ 
+-		// Match render()'s logic: use frameBufferTarget when needsFrameBufferTarget is true
+-		const useFrameBufferTarget = this.needsFrameBufferTarget && this._renderTarget === null;
+-		const outputRenderTarget = this._renderTarget || this._outputRenderTarget;
+-		const useXRCamera = this.xr.isPresenting === true && this.isOutputTarget;
+-		const renderTarget = useFrameBufferTarget ? this._getFrameBufferTarget() : outputRenderTarget;
+-
+-		const activeCubeFace = this._activeCubeFace;
+-		const activeMipmapLevel = this._activeMipmapLevel;
+-
+-		// a state snapshot is taken once at the beginning and reapplied every time precompilation continues.
+-		// `item` is the work item that is currently processed, see `_beginPreCompile()`
++		const compilationPromises = [];
+ 
+-		// the work items always set their render target, without the frame buffer target the current one is restored
++		this._beginPreCompile( precompilationState );
+ 
+-		const precompilationState = { useFrameBufferTarget, renderTarget, outputRenderTarget: useFrameBufferTarget ? outputRenderTarget : this._renderTarget, activeCubeFace, activeMipmapLevel, item: null, materialSide: null, mrt: this._mrt, outputMRT: this._mrt };
++		try {
+ 
+-		this._beginPreCompile( precompilationState );
++			// Match render()'s logic: use frameBufferTarget when needsFrameBufferTarget is true
++			const useFrameBufferTarget = this.needsFrameBufferTarget && this._renderTarget === null;
++			const outputRenderTarget = this._renderTarget || this._outputRenderTarget;
++			const useXRCamera = this.xr.isPresenting === true && this.isOutputTarget;
++			const renderTarget = useFrameBufferTarget ? this._getFrameBufferTarget() : outputRenderTarget;
+ 
+-		const renderContext = this._renderContexts.get( renderTarget, this._mrt, this._callDepth, camera );
++			const { activeMipmapLevel } = precompilationState;
+ 
+-		precompilationState.renderContext = renderContext;
++			if ( useFrameBufferTarget === true ) this.setRenderTarget( renderTarget );
+ 
+-		const compilationPromises = [];
++			const renderContext = this._renderContexts.get( renderTarget, this._mrt, this._callDepth, camera );
+ 
+-		this._currentRenderContext = renderContext;
+-		this._currentRenderObjectFunction = this.renderObject;
++			const nodeFrame = this._nodes.nodeFrame;
+ 
+-		this._handleObjectFunction = this._createObjectPipeline;
++			this._currentRenderContext = renderContext;
++			this._currentRenderObjectFunction = this.renderObject;
+ 
+-		this._compilationPromises = compilationPromises;
++			this._handleObjectFunction = this._createObjectPipeline;
+ 
+-		nodeFrame.renderId ++;
++			this._compilationPromises = compilationPromises;
+ 
+-		//
++			nodeFrame.renderId ++;
+ 
+-		nodeFrame.update();
++			//
+ 
+-		//
++			nodeFrame.update();
+ 
+-		renderContext.depth = this.depth;
+-		renderContext.stencil = this.stencil;
++			//
+ 
+-		if ( ! renderContext.clippingContext ) renderContext.clippingContext = new ClippingContext();
+-		renderContext.clippingContext.updateGlobal( sceneRef, camera );
++			renderContext.depth = this.depth;
++			renderContext.stencil = this.stencil;
+ 
+-		//
++			if ( ! renderContext.clippingContext ) renderContext.clippingContext = new ClippingContext();
++			renderContext.clippingContext.updateGlobal( sceneRef, camera );
+ 
+-		if ( scene.matrixWorldAutoUpdate === true ) scene.updateMatrixWorld();
++			//
+ 
+-		camera = this._updateCamera( camera, useXRCamera );
++			if ( scene.matrixWorldAutoUpdate === true ) scene.updateMatrixWorld();
+ 
+-		//
++			camera = this._updateCamera( camera, useXRCamera );
+ 
+-		sceneRef.onBeforeRender( this, scene, camera, renderTarget );
++			//
+ 
+-		//
++			sceneRef.onBeforeRender( this, scene, camera, renderTarget );
+ 
+-		this.drawingPipeline.begin( camera, renderContext );
++			//
+ 
+-		// Use sceneRef for render list to ensure lightsNode matches between compileAsync and render
+-		const renderList = this._renderLists.get( sceneRef, camera, this.lighting );
+-		this.drawingPipeline.beginRenderList( renderList );
++			this.drawingPipeline.begin( camera, renderContext );
+ 
+-		this.drawingPipeline.project( scene, camera, 0, renderList, renderContext.clippingContext );
++			// Use sceneRef for render list to ensure lightsNode matches between compileAsync and render
++			const renderList = this._renderLists.get( sceneRef, camera, this.lighting );
++			this.drawingPipeline.beginRenderList( renderList );
+ 
+-		// include lights from target scene
+-		if ( targetScene !== scene ) {
++			this.drawingPipeline.project( scene, camera, 0, renderList, renderContext.clippingContext );
+ 
+-			targetScene.traverseVisible( function ( object ) {
++			// include lights from target scene
++			if ( targetScene !== scene ) {
+ 
+-				if ( object.isLight && object.layers.test( camera.layers ) ) {
++				targetScene.traverseVisible( function ( object ) {
+ 
+-					renderList.pushLight( object );
++					if ( object.isLight && object.layers.test( camera.layers ) ) {
+ 
+-				}
++						renderList.pushLight( object );
+ 
+-			} );
++					}
+ 
+-		}
++				} );
+ 
+-		this.drawingPipeline.finishRenderList( renderList );
++			}
+ 
+-		//
++			this.drawingPipeline.finishRenderList( renderList );
+ 
+-		if ( renderTarget !== null ) {
++			//
+ 
+-			this._textures.updateRenderTarget( renderTarget, activeMipmapLevel );
++			if ( renderTarget !== null ) {
+ 
+-			const renderTargetData = this._textures.get( renderTarget );
++				this._textures.updateRenderTarget( renderTarget, activeMipmapLevel );
+ 
+-			renderContext.textures = renderTargetData.textures;
+-			renderContext.depthTexture = renderTargetData.depthTexture;
++				const renderTargetData = this._textures.get( renderTarget );
+ 
+-		} else {
++				renderContext.textures = renderTargetData.textures;
++				renderContext.depthTexture = renderTargetData.depthTexture;
+ 
+-			renderContext.textures = null;
+-			renderContext.depthTexture = null;
++			} else {
+ 
+-		}
++				renderContext.textures = null;
++				renderContext.depthTexture = null;
+ 
+-		//
++			}
+ 
+-		if ( targetScene !== scene ) {
++			//
+ 
+-			this._background.update( targetScene, renderList, renderContext );
++			if ( targetScene !== scene ) {
+ 
+-		} else {
++				this._background.update( targetScene, renderList, renderContext );
+ 
+-			this._background.update( sceneRef, renderList, renderContext );
++			} else {
+ 
+-		}
++				this._background.update( sceneRef, renderList, renderContext );
+ 
+-		// process render lists - _createObjectPipeline queues work in _compilationPromises
++			}
+ 
+-		const opaqueObjects = renderList.opaque;
+-		const transparentObjects = renderList.transparent;
+-		const transparentDoublePassObjects = renderList.transparentDoublePass;
+-		const lightsNode = renderList.lightsNode;
++			// process render lists - _createObjectPipeline queues work in _compilationPromises
+ 
+-		if ( this.opaque === true && opaqueObjects.length > 0 ) this._renderObjects( opaqueObjects, camera, sceneRef, lightsNode );
+-		if ( this.transparent === true && transparentObjects.length > 0 ) this._renderTransparents( transparentObjects, transparentDoublePassObjects, camera, sceneRef, lightsNode );
++			const opaqueObjects = renderList.opaque;
++			const transparentObjects = renderList.transparent;
++			const transparentDoublePassObjects = renderList.transparentDoublePass;
++			const lightsNode = renderList.lightsNode;
+ 
+-		// restore render tree
++			if ( this.opaque === true && opaqueObjects.length > 0 ) this._renderObjects( opaqueObjects, camera, sceneRef, lightsNode );
++			if ( this.transparent === true && transparentObjects.length > 0 ) this._renderTransparents( transparentObjects, transparentDoublePassObjects, camera, sceneRef, lightsNode );
+ 
+-		nodeFrame.renderId = previousRenderId;
++		} finally {
+ 
+-		this._currentRenderContext = previousRenderContext;
+-		this._currentRenderObjectFunction = previousRenderObjectFunction;
+-		this._handleObjectFunction = previousHandleObjectFunction;
+-		this._compilationPromises = previousCompilationPromises;
++			this._finishPreCompile();
+ 
+-		this._finishPreCompile();
++		}
+ 
+ 		// Process compilation work items sequentially and yield to the main thread after a
+ 		// time budget to keep animation smooth. Pipelines are compiled in parallel while
+@@ -23441,20 +23127,6 @@ class Renderer {
+ 
+ 		};
+ 
+-		const yieldPreCompile = async () => {
+-
+-			if ( scheduler.needsYield() === false ) return;
+-
+-			const activePrecompilationState = this._precompilationState;
+-
+-			this._finishPreCompile();
+-
+-			await scheduler.yield();
+-
+-			this._beginPreCompile( activePrecompilationState );
+-
+-		};
+-
+ 		for ( const item of compilationPromises ) {
+ 
+ 			if ( item.computeNodes !== undefined ) {
+@@ -23478,19 +23150,24 @@ class Renderer {
+ 
+ 			this._beginPreCompile( itemPrecompilationState );
+ 
+-			const renderObject = this._objects.get( item.object, item.material, item.scene, item.camera, item.lightsNode, item.renderContext, item.clippingContext, item.passId );
+-			renderObject.drawRange = item.object.geometry.drawRange;
+-			renderObject.group = item.group;
++			try {
+ 
+-			await this._nodes.getForRenderAsync( renderObject, yieldPreCompile );
+-			this._nodes.updateBefore( renderObject );
+-			this._geometries.updateForRender( renderObject );
+-			this._nodes.updateForRender( renderObject );
+-			this._bindings.updateForRender( renderObject );
+-			this._pipelines.getForRender( renderObject, pipelinePromises );
+-			this._nodes.updateAfter( renderObject );
++				const renderObject = this._objects.get( item.object, item.material, item.scene, item.camera, item.lightsNode, item.renderContext, item.clippingContext, item.passId );
++				renderObject.drawRange = item.object.geometry.drawRange;
++				renderObject.group = item.group;
+ 
+-			this._finishPreCompile();
++				this._nodes.updateBefore( renderObject );
++				this._geometries.updateForRender( renderObject );
++				this._nodes.updateForRender( renderObject );
++				this._bindings.updateForRender( renderObject );
++				this._pipelines.getForRender( renderObject, pipelinePromises );
++				this._nodes.updateAfter( renderObject );
++
++			} finally {
++
++				this._finishPreCompile();
++
++			}
+ 
+ 			if ( pipelinePromises.length > 0 ) {
+ 
+@@ -23519,6 +23196,26 @@ class Renderer {
+ 
+ 	}
+ 
++	/**
++	 * Returns the renderer state a precompilation depends on.
++	 *
++	 * @private
++	 * @return {Object} The precompilation state.
++	 */
++	_getPrecompilationState() {
++
++		return {
++			renderTarget: this._renderTarget,
++			activeCubeFace: this._activeCubeFace,
++			activeMipmapLevel: this._activeMipmapLevel,
++			mrt: this._mrt,
++			contextNode: this.contextNode,
++			renderContext: this._currentRenderContext,
++			item: null
++		};
++
++	}
++
+ 	/**
+ 	 * Sets up the renderer state for precompiling in `compileAsync()`.
+ 	 * The state must be restored with `_finishPreCompile()` before yielding to the main thread,
+@@ -23529,10 +23226,23 @@ class Renderer {
+ 	 */
+ 	_beginPreCompile( precompilationState ) {
+ 
+-		const { useFrameBufferTarget, renderTarget, mrt, renderContext, item } = precompilationState;
++		const { renderTarget, activeCubeFace, activeMipmapLevel, mrt, contextNode, renderContext, item } = precompilationState;
++
++		precompilationState.previousRenderTarget = this._renderTarget;
++		precompilationState.previousActiveCubeFace = this._activeCubeFace;
++		precompilationState.previousActiveMipmapLevel = this._activeMipmapLevel;
++		precompilationState.previousMRT = this._mrt;
++		precompilationState.previousContextNode = this.contextNode;
++		precompilationState.previousRenderContext = this._currentRenderContext;
++		precompilationState.previousRenderObjectFunction = this._currentRenderObjectFunction;
++		precompilationState.previousHandleObjectFunction = this._handleObjectFunction;
++		precompilationState.previousCompilationPromises = this._compilationPromises;
++		precompilationState.previousRenderId = this._nodes.nodeFrame.renderId;
++		precompilationState.previousPrecompilationState = this._precompilationState;
+ 
+-		if ( useFrameBufferTarget === true ) this.setRenderTarget( renderTarget );
++		this.setRenderTarget( renderTarget, activeCubeFace, activeMipmapLevel );
+ 		this.setMRT( mrt );
++		this.contextNode = contextNode;
+ 
+ 		if ( item !== null ) {
+ 
+@@ -23548,9 +23258,7 @@ class Renderer {
+ 
+ 		// node builds take their shared bind groups from the current render context
+ 
+-		precompilationState.previousRenderContext = this._currentRenderContext;
+-
+-		if ( renderContext !== undefined ) this._currentRenderContext = renderContext;
++		this._currentRenderContext = renderContext;
+ 
+ 		this._precompilationState = precompilationState;
+ 
+@@ -23563,18 +23271,23 @@ class Renderer {
+ 	 */
+ 	_finishPreCompile() {
+ 
+-		const { useFrameBufferTarget, outputRenderTarget, activeCubeFace, activeMipmapLevel, outputMRT, previousRenderContext, item, materialSide } = this._precompilationState;
++		const precompilationState = this._precompilationState;
+ 
+-		if ( useFrameBufferTarget === true ) this.setRenderTarget( outputRenderTarget, activeCubeFace, activeMipmapLevel );
+-		this.setMRT( outputMRT );
++		this.setRenderTarget( precompilationState.previousRenderTarget, precompilationState.previousActiveCubeFace, precompilationState.previousActiveMipmapLevel );
++		this.setMRT( precompilationState.previousMRT );
++		this.contextNode = precompilationState.previousContextNode;
+ 
+-		if ( item !== null ) item.material.side = materialSide;
++		if ( precompilationState.item !== null ) precompilationState.item.material.side = precompilationState.materialSide;
+ 
+-		this._currentRenderContext = previousRenderContext;
++		this._currentRenderContext = precompilationState.previousRenderContext;
++		this._currentRenderObjectFunction = precompilationState.previousRenderObjectFunction;
++		this._handleObjectFunction = precompilationState.previousHandleObjectFunction;
++		this._compilationPromises = precompilationState.previousCompilationPromises;
++		this._nodes.nodeFrame.renderId = precompilationState.previousRenderId;
+ 
+ 		this._callDepth --;
+ 
+-		this._precompilationState = null;
++		this._precompilationState = precompilationState.previousPrecompilationState;
+ 
+ 	}
+ 
+@@ -23620,14 +23333,6 @@ class Renderer {
+ 
+ 		};
+ 
+-		const yieldCompile = async () => {
+-
+-			if ( scheduler.needsYield() ) await scheduler.yield();
+-
+-		};
+-
+-		//
+-
+ 		const pipelines = this._pipelines;
+ 		const bindings = this._bindings;
+ 		const nodes = this._nodes;
+@@ -23658,8 +23363,6 @@ class Renderer {
+ 
+ 			}
+ 
+-			await nodes.getForComputeAsync( computeNode, yieldCompile );
+-
+ 			nodes.updateBeforeForCompute( computeNode );
+ 			nodes.updateForCompute( computeNode );
+ 			bindings.updateForCompute( computeNode );
+@@ -23692,7 +23395,7 @@ class Renderer {
+ 
+ 			}
+ 
+-			await yieldCompile();
++			if ( scheduler.needsYield() ) await scheduler.yield();
+ 
+ 		}
+ 
+@@ -26342,8 +26045,7 @@ class Renderer {
+ 	}
+ 
+ 	/**
+-	 * A different implementation for `_handleObjectFunction` which only makes sure the object is ready for rendering.
+-	 * Used in `compileAsync()`.
++	 * A different implementation for `_handleObjectFunction` which queues the object for `compileAsync()`.
+ 	 *
+ 	 * @private
+ 	 * @param {Object3D} object - The 3D object.
+@@ -26357,52 +26059,21 @@ class Renderer {
+ 	 */
+ 	_createObjectPipeline( object, material, scene, camera, lightsNode, group, clippingContext, passId ) {
+ 
+-		// If in async compilation mode, queue the work for sequential execution
+-		if ( this._compilationPromises !== null ) {
+-
+-			// Store work items instead of promises - will be processed sequentially.
+-			// The side is stored since the renderer might have changed it temporarily.
+-			this._compilationPromises.push( {
+-				object,
+-				material,
+-				side: material.side,
+-				scene,
+-				camera,
+-				lightsNode,
+-				group,
+-				clippingContext,
+-				passId,
+-				renderContext: this._currentRenderContext,
+-				precompilationState: {
+-					...this._precompilationState,
+-					useFrameBufferTarget: true,
+-					renderTarget: this.getRenderTarget(),
+-					mrt: this.getMRT(),
+-					renderContext: this._currentRenderContext
+-				}
+-			} );
+-
+-			return;
+-
+-		}
+-
+-		// Sync path
+-		const renderObject = this._objects.get( object, material, scene, camera, lightsNode, this._currentRenderContext, clippingContext, passId );
+-		renderObject.drawRange = object.geometry.drawRange;
+-		renderObject.group = group;
+-
+-		//
+-
+-		this._nodes.updateBefore( renderObject );
+-
+-		this._geometries.updateForRender( renderObject );
+-
+-		this._nodes.updateForRender( renderObject );
+-		this._bindings.updateForRender( renderObject );
+-
+-		this._pipelines.getForRender( renderObject, this._compilationPromises );
+-
+-		this._nodes.updateAfter( renderObject );
++		// Store work items instead of promises - will be processed sequentially.
++		// The side is stored since the renderer might have changed it temporarily.
++		this._compilationPromises.push( {
++			object,
++			material,
++			side: material.side,
++			scene,
++			camera,
++			lightsNode,
++			group,
++			clippingContext,
++			passId,
++			renderContext: this._currentRenderContext,
++			precompilationState: this._getPrecompilationState()
++		} );
+ 
+ 	}
+ 
+diff --git a/build/three.webgpu.nodes.js b/build/three.webgpu.nodes.js
+index 39c897cb2f5f2092419c2cd4f464a88f1151d7d0..e105cbe21030a533703c61fabc00a1b96a49916d 100644
+--- a/build/three.webgpu.nodes.js
++++ b/build/three.webgpu.nodes.js
+@@ -44643,12 +44643,14 @@ class PassNode extends Node {
+ 
+ 		if ( this.contextNode !== null ) renderer.contextNode = this._getContextNode( renderer );
+ 
+-		await renderer.compileAsync( this.scene, this.camera );
++		const promise = renderer.compileAsync( this.scene, this.camera );
+ 
+ 		renderer.setRenderTarget( currentRenderTarget );
+ 		renderer.setMRT( currentMRT );
+ 		renderer.contextNode = currentContextNode;
+ 
++		await promise;
++
+ 	}
+ 
+ 	setup( { renderer } ) {
+@@ -57301,70 +57303,6 @@ class NodeBuilder {
+ 
+ 	}
+ 
+-	/**
+-	 * Async version of build() that yields to main thread between shader stages.
+-	 * Use this in compileAsync() to prevent blocking the main thread.
+-	 *
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread.
+-	 * @return {Promise<NodeBuilder>} A promise that resolves to this node builder.
+-	 */
+-	async buildAsync( yieldFn = yieldToMain ) {
+-
+-		this.prebuild();
+-
+-		// setup() -> stage 1: create possible new nodes and/or return an output reference node
+-		// analyze()   -> stage 2: analyze nodes to possible optimization and validation
+-		// generate()  -> stage 3: generate shader
+-
+-		for ( const buildStage of defaultBuildStages ) {
+-
+-			this.setBuildStage( buildStage );
+-
+-			if ( this.context.position && this.context.position.isNode ) {
+-
+-				this.flowNodeFromShaderStage( 'vertex', this.context.position );
+-
+-			}
+-
+-			for ( const shaderStage of shaderStages ) {
+-
+-				this.setShaderStage( shaderStage );
+-
+-				const flowNodes = this.flowNodes[ shaderStage ];
+-
+-				for ( const node of flowNodes ) {
+-
+-					if ( buildStage === 'generate' ) {
+-
+-						this.flowNode( node );
+-
+-					} else {
+-
+-						node.build( this );
+-
+-					}
+-
+-				}
+-
+-				// Yield to main thread after each shader stage to prevent blocking
+-				await yieldFn();
+-
+-			}
+-
+-		}
+-
+-		this.setBuildStage( null );
+-		this.setShaderStage( null );
+-
+-		// stage 4: build code for a specific output
+-
+-		this.buildCode();
+-		this.buildUpdateNodes();
+-
+-		return this;
+-
+-	}
+-
+ 	/**
+ 	 * Returns a uniform representation which is later used for UBO generation and rendering.
+ 	 *
+@@ -58955,22 +58893,6 @@ class NodeManager extends DataMap {
+ 		 */
+ 		this.groupsData = new ChainMap();
+ 
+-		/**
+-		 * Queue for pending async builds to limit concurrent compilation.
+-		 *
+-		 * @private
+-		 * @type {Array<Function>}
+-		 */
+-		this._buildQueue = [];
+-
+-		/**
+-		 * Whether an async build is currently in progress.
+-		 *
+-		 * @private
+-		 * @type {boolean}
+-		 */
+-		this._buildInProgress = false;
+-
+ 		/**
+ 		 * A cache for managing node objects of
+ 		 * scene properties like fog or environments.
+@@ -59064,36 +58986,13 @@ class NodeManager extends DataMap {
+ 
+ 	}
+ 
+-	/**
+-	 * Logs an error thrown while building a node material.
+-	 *
+-	 * @private
+-	 * @param {Error} e - The build error.
+-	 */
+-	_reportBuildError( e ) {
+-
+-		let stackTrace = e.stackTrace;
+-
+-		if ( ! stackTrace && e.stack ) {
+-
+-			// Capture stack trace for JavaScript errors
+-
+-			stackTrace = new StackTrace( e.stack );
+-
+-		}
+-
+-		error( 'TSL: ' + e, stackTrace );
+-
+-	}
+-
+ 	/**
+ 	 * Returns a node builder state for the given render object.
+ 	 *
+ 	 * @param {RenderObject} renderObject - The render object.
+-	 * @param {?Function} [yieldFn=null] - If set, the build is async and yields to the main thread via this function.
+-	 * @return {NodeBuilderState|Promise<NodeBuilderState>} The node builder state (or Promise if async).
++	 * @return {NodeBuilderState} The node builder state.
+ 	 */
+-	getForRender( renderObject, yieldFn = null ) {
++	getForRender( renderObject ) {
+ 
+ 		const renderObjectData = this.get( renderObject );
+ 
+@@ -59109,80 +59008,34 @@ class NodeManager extends DataMap {
+ 
+ 			if ( nodeBuilderState === undefined ) {
+ 
+-				const buildNodeBuilder = async () => {
+-
+-					let nodeBuilder = this._createNodeBuilder( renderObject, renderObject.material );
+-
+-					try {
+-
+-						if ( yieldFn !== null ) {
++				let nodeBuilder = this._createNodeBuilder( renderObject, renderObject.material );
+ 
+-							await nodeBuilder.buildAsync( yieldFn );
+-
+-						} else {
+-
+-							nodeBuilder.build();
+-
+-						}
+-
+-					} catch ( e ) {
++				try {
+ 
+-						nodeBuilder = this._createNodeBuilder( renderObject, new NodeMaterial() );
++					nodeBuilder.build();
+ 
+-						if ( yieldFn !== null ) {
++				} catch ( e ) {
+ 
+-							await nodeBuilder.buildAsync( yieldFn );
++					nodeBuilder = this._createNodeBuilder( renderObject, new NodeMaterial() );
++					nodeBuilder.build();
+ 
+-						} else {
++					let stackTrace = e.stackTrace;
+ 
+-							nodeBuilder.build();
++					if ( ! stackTrace && e.stack ) {
+ 
+-						}
++						// Capture stack trace for JavaScript errors
+ 
+-						this._reportBuildError( e );
++						stackTrace = new StackTrace( e.stack );
+ 
+ 					}
+ 
+-					return nodeBuilder;
+-
+-				};
+-
+-				if ( yieldFn !== null ) {
+-
+-					return buildNodeBuilder().then( ( nodeBuilder ) => {
+-
+-						nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+-						if ( nodeBuilder.objectSpecific === false ) nodeBuilderCache.set( cacheKey, nodeBuilderState );
+-						nodeBuilderState.usedTimes ++;
+-						renderObjectData.nodeBuilderState = nodeBuilderState;
+-
+-						return nodeBuilderState;
+-
+-					} );
+-
+-				} else {
+-
+-					// Synchronous path - call buildNodeBuilder but don't await
+-					let nodeBuilder = this._createNodeBuilder( renderObject, renderObject.material );
+-
+-					try {
++					error( 'TSL: ' + e, stackTrace );
+ 
+-						nodeBuilder.build();
+-
+-					} catch ( e ) {
+-
+-						nodeBuilder = this._createNodeBuilder( renderObject, new NodeMaterial() );
+-						nodeBuilder.build();
+-
+-						this._reportBuildError( e );
+-
+-					}
+-
+-					nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
++				}
+ 
+-					if ( nodeBuilder.objectSpecific === false ) nodeBuilderCache.set( cacheKey, nodeBuilderState );
++				nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+ 
+-				}
++				if ( nodeBuilder.objectSpecific === false ) nodeBuilderCache.set( cacheKey, nodeBuilderState );
+ 
+ 			}
+ 
+@@ -59196,115 +59049,6 @@ class NodeManager extends DataMap {
+ 
+ 	}
+ 
+-	/**
+-	 * Async version of getForRender() that yields to main thread during build.
+-	 * Use this in compileAsync() to prevent blocking the main thread.
+-	 *
+-	 * @param {RenderObject} renderObject - The render object.
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread.
+-	 * @return {Promise<NodeBuilderState>} A promise that resolves to the node builder state.
+-	 */
+-	getForRenderAsync( renderObject, yieldFn = yieldToMain ) {
+-
+-		const result = this.getForRender( renderObject, yieldFn );
+-
+-		// Ensure we always return a Promise (cache hit returns nodeBuilderState directly)
+-		if ( result.then ) {
+-
+-			return result;
+-
+-		}
+-
+-		return Promise.resolve( result );
+-
+-	}
+-
+-	/**
+-	 * Returns nodeBuilderState if ready, null if pending async build.
+-	 * Queues async build on first call for cache miss.
+-	 * Use this in render() path to enable non-blocking compilation.
+-	 *
+-	 * @param {RenderObject} renderObject - The render object.
+-	 * @return {?NodeBuilderState} The node builder state, or null if still building.
+-	 */
+-	getForRenderDeferred( renderObject ) {
+-
+-		const renderObjectData = this.get( renderObject );
+-
+-		// Already built for this renderObject
+-		if ( renderObjectData.nodeBuilderState !== undefined ) {
+-
+-			return renderObjectData.nodeBuilderState;
+-
+-		}
+-
+-		// Check cache with stable key
+-		const cacheKey = this.getForRenderCacheKey( renderObject );
+-		const nodeBuilderState = this.nodeBuilderCache.get( cacheKey );
+-
+-		if ( nodeBuilderState !== undefined ) {
+-
+-			// Cache hit - use it
+-			nodeBuilderState.usedTimes ++;
+-			renderObjectData.nodeBuilderState = nodeBuilderState;
+-			return nodeBuilderState;
+-
+-		}
+-
+-		// Cache miss - check if async build already queued
+-		if ( renderObjectData.pendingBuild !== true ) {
+-
+-			// Mark as pending and add to build queue
+-			renderObjectData.pendingBuild = true;
+-
+-			this._buildQueue.push( () => {
+-
+-				return this.getForRenderAsync( renderObject ).then( () => {
+-
+-					renderObjectData.pendingBuild = false;
+-
+-				} );
+-
+-			} );
+-
+-			// Start processing queue if not already running
+-			this._processBuildQueue();
+-
+-		}
+-
+-		return null; // Not ready
+-
+-	}
+-
+-	/**
+-	 * Processes the build queue one item at a time.
+-	 * This ensures builds don't all run simultaneously and freeze the main thread.
+-	 *
+-	 * @private
+-	 */
+-	_processBuildQueue() {
+-
+-		if ( this._buildInProgress || this._buildQueue.length === 0 ) {
+-
+-			return;
+-
+-		}
+-
+-		this._buildInProgress = true;
+-
+-		const buildFn = this._buildQueue.shift();
+-
+-		buildFn().then( () => {
+-
+-			this._buildInProgress = false;
+-
+-			// Process next item in queue
+-			this._processBuildQueue();
+-
+-		} );
+-
+-	}
+-
+ 	/**
+ 	 * Deletes the given object from the internal data map
+ 	 *
+@@ -59339,11 +59083,9 @@ class NodeManager extends DataMap {
+ 	 * Returns a node builder state for the given compute node.
+ 	 *
+ 	 * @param {Node} computeNode - The compute node.
+-	 * @param {boolean} [useAsync=false] - Whether to use async build with yielding.
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread in an async build.
+-	 * @return {NodeBuilderState|Promise<NodeBuilderState>} The node builder state (or Promise if async).
++	 * @return {NodeBuilderState} The node builder state.
+ 	 */
+-	getForCompute( computeNode, useAsync = false, yieldFn = yieldToMain ) {
++	getForCompute( computeNode ) {
+ 
+ 		const computeData = this.get( computeNode );
+ 
+@@ -59358,21 +59100,6 @@ class NodeManager extends DataMap {
+ 
+ 			if ( onNodeBuilderCreated !== null ) onNodeBuilderCreated( nodeBuilder, computeNode );
+ 
+-			if ( useAsync ) {
+-
+-				return nodeBuilder.buildAsync( yieldFn ).then( () => {
+-
+-					nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+-
+-					computeData.nodeBuilderState = nodeBuilderState;
+-					computeData.version = computeNode.version;
+-
+-					return nodeBuilderState;
+-
+-				} );
+-
+-			}
+-
+ 			nodeBuilder.build();
+ 
+ 			nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+@@ -59386,28 +59113,6 @@ class NodeManager extends DataMap {
+ 
+ 	}
+ 
+-	/**
+-	 * Async version of getForCompute() that yields to main thread during build.
+-	 * Use this in compileComputeAsync() to prevent blocking the main thread.
+-	 *
+-	 * @param {Node} computeNode - The compute node.
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread.
+-	 * @return {Promise<NodeBuilderState>} A promise that resolves to the node builder state.
+-	 */
+-	getForComputeAsync( computeNode, yieldFn = yieldToMain ) {
+-
+-		const result = this.getForCompute( computeNode, true, yieldFn );
+-
+-		if ( result.then ) {
+-
+-			return result;
+-
+-		}
+-
+-		return Promise.resolve( result );
+-
+-	}
+-
+ 	/**
+ 	 * Creates a node builder state for the given node builder.
+ 	 *
+@@ -64454,9 +64159,11 @@ class Renderer {
+ 
+ 		if ( this._isDeviceLost === true ) return;
+ 
++		const precompilationState = this._getPrecompilationState();
++
+ 		if ( this._initialized === false ) await this.init();
+ 
+-		// only awaited when the drawing pipeline prepares something, so the state below is still taken synchronously
++		// only awaited when the drawing pipeline prepares something
+ 
+ 		const prepare = this.drawingPipeline.prepareAsync( scene, camera );
+ 
+@@ -64470,16 +64177,6 @@ class Renderer {
+ 
+ 		}
+ 
+-		// preserve render tree
+-
+-		const nodeFrame = this._nodes.nodeFrame;
+-
+-		const previousRenderId = nodeFrame.renderId;
+-		const previousRenderContext = this._currentRenderContext;
+-		const previousRenderObjectFunction = this._currentRenderObjectFunction;
+-		const previousHandleObjectFunction = this._handleObjectFunction;
+-		const previousCompilationPromises = this._compilationPromises;
+-
+ 		//
+ 
+ 		if ( targetScene === null ) targetScene = scene;
+@@ -64488,138 +64185,129 @@ class Renderer {
+ 		// This ensures cache keys match between compileAsync and render
+ 		const sceneRef = ( scene.isScene === true ) ? scene : ( targetScene.isScene === true ) ? targetScene : _scene;
+ 
+-		// Match render()'s logic: use frameBufferTarget when needsFrameBufferTarget is true
+-		const useFrameBufferTarget = this.needsFrameBufferTarget && this._renderTarget === null;
+-		const outputRenderTarget = this._renderTarget || this._outputRenderTarget;
+-		const useXRCamera = this.xr.isPresenting === true && this.isOutputTarget;
+-		const renderTarget = useFrameBufferTarget ? this._getFrameBufferTarget() : outputRenderTarget;
+-
+-		const activeCubeFace = this._activeCubeFace;
+-		const activeMipmapLevel = this._activeMipmapLevel;
++		const compilationPromises = [];
+ 
+-		// a state snapshot is taken once at the beginning and reapplied every time precompilation continues.
+-		// `item` is the work item that is currently processed, see `_beginPreCompile()`
++		this._beginPreCompile( precompilationState );
+ 
+-		// the work items always set their render target, without the frame buffer target the current one is restored
++		try {
+ 
+-		const precompilationState = { useFrameBufferTarget, renderTarget, outputRenderTarget: useFrameBufferTarget ? outputRenderTarget : this._renderTarget, activeCubeFace, activeMipmapLevel, item: null, materialSide: null, mrt: this._mrt, outputMRT: this._mrt };
++			// Match render()'s logic: use frameBufferTarget when needsFrameBufferTarget is true
++			const useFrameBufferTarget = this.needsFrameBufferTarget && this._renderTarget === null;
++			const outputRenderTarget = this._renderTarget || this._outputRenderTarget;
++			const useXRCamera = this.xr.isPresenting === true && this.isOutputTarget;
++			const renderTarget = useFrameBufferTarget ? this._getFrameBufferTarget() : outputRenderTarget;
+ 
+-		this._beginPreCompile( precompilationState );
++			const { activeMipmapLevel } = precompilationState;
+ 
+-		const renderContext = this._renderContexts.get( renderTarget, this._mrt, this._callDepth, camera );
++			if ( useFrameBufferTarget === true ) this.setRenderTarget( renderTarget );
+ 
+-		precompilationState.renderContext = renderContext;
++			const renderContext = this._renderContexts.get( renderTarget, this._mrt, this._callDepth, camera );
+ 
+-		const compilationPromises = [];
++			const nodeFrame = this._nodes.nodeFrame;
+ 
+-		this._currentRenderContext = renderContext;
+-		this._currentRenderObjectFunction = this.renderObject;
++			this._currentRenderContext = renderContext;
++			this._currentRenderObjectFunction = this.renderObject;
+ 
+-		this._handleObjectFunction = this._createObjectPipeline;
++			this._handleObjectFunction = this._createObjectPipeline;
+ 
+-		this._compilationPromises = compilationPromises;
++			this._compilationPromises = compilationPromises;
+ 
+-		nodeFrame.renderId ++;
++			nodeFrame.renderId ++;
+ 
+-		//
++			//
+ 
+-		nodeFrame.update();
++			nodeFrame.update();
+ 
+-		//
++			//
+ 
+-		renderContext.depth = this.depth;
+-		renderContext.stencil = this.stencil;
++			renderContext.depth = this.depth;
++			renderContext.stencil = this.stencil;
+ 
+-		if ( ! renderContext.clippingContext ) renderContext.clippingContext = new ClippingContext();
+-		renderContext.clippingContext.updateGlobal( sceneRef, camera );
++			if ( ! renderContext.clippingContext ) renderContext.clippingContext = new ClippingContext();
++			renderContext.clippingContext.updateGlobal( sceneRef, camera );
+ 
+-		//
++			//
+ 
+-		if ( scene.matrixWorldAutoUpdate === true ) scene.updateMatrixWorld();
++			if ( scene.matrixWorldAutoUpdate === true ) scene.updateMatrixWorld();
+ 
+-		camera = this._updateCamera( camera, useXRCamera );
+-
+-		//
++			camera = this._updateCamera( camera, useXRCamera );
+ 
+-		sceneRef.onBeforeRender( this, scene, camera, renderTarget );
++			//
+ 
+-		//
++			sceneRef.onBeforeRender( this, scene, camera, renderTarget );
+ 
+-		this.drawingPipeline.begin( camera, renderContext );
++			//
+ 
+-		// Use sceneRef for render list to ensure lightsNode matches between compileAsync and render
+-		const renderList = this._renderLists.get( sceneRef, camera, this.lighting );
+-		this.drawingPipeline.beginRenderList( renderList );
++			this.drawingPipeline.begin( camera, renderContext );
+ 
+-		this.drawingPipeline.project( scene, camera, 0, renderList, renderContext.clippingContext );
++			// Use sceneRef for render list to ensure lightsNode matches between compileAsync and render
++			const renderList = this._renderLists.get( sceneRef, camera, this.lighting );
++			this.drawingPipeline.beginRenderList( renderList );
+ 
+-		// include lights from target scene
+-		if ( targetScene !== scene ) {
++			this.drawingPipeline.project( scene, camera, 0, renderList, renderContext.clippingContext );
+ 
+-			targetScene.traverseVisible( function ( object ) {
++			// include lights from target scene
++			if ( targetScene !== scene ) {
+ 
+-				if ( object.isLight && object.layers.test( camera.layers ) ) {
++				targetScene.traverseVisible( function ( object ) {
+ 
+-					renderList.pushLight( object );
++					if ( object.isLight && object.layers.test( camera.layers ) ) {
+ 
+-				}
++						renderList.pushLight( object );
+ 
+-			} );
++					}
+ 
+-		}
++				} );
+ 
+-		this.drawingPipeline.finishRenderList( renderList );
++			}
+ 
+-		//
++			this.drawingPipeline.finishRenderList( renderList );
+ 
+-		if ( renderTarget !== null ) {
++			//
+ 
+-			this._textures.updateRenderTarget( renderTarget, activeMipmapLevel );
++			if ( renderTarget !== null ) {
+ 
+-			const renderTargetData = this._textures.get( renderTarget );
++				this._textures.updateRenderTarget( renderTarget, activeMipmapLevel );
+ 
+-			renderContext.textures = renderTargetData.textures;
+-			renderContext.depthTexture = renderTargetData.depthTexture;
++				const renderTargetData = this._textures.get( renderTarget );
+ 
+-		} else {
++				renderContext.textures = renderTargetData.textures;
++				renderContext.depthTexture = renderTargetData.depthTexture;
+ 
+-			renderContext.textures = null;
+-			renderContext.depthTexture = null;
++			} else {
+ 
+-		}
++				renderContext.textures = null;
++				renderContext.depthTexture = null;
+ 
+-		//
++			}
+ 
+-		if ( targetScene !== scene ) {
++			//
+ 
+-			this._background.update( targetScene, renderList, renderContext );
++			if ( targetScene !== scene ) {
+ 
+-		} else {
++				this._background.update( targetScene, renderList, renderContext );
+ 
+-			this._background.update( sceneRef, renderList, renderContext );
++			} else {
+ 
+-		}
++				this._background.update( sceneRef, renderList, renderContext );
+ 
+-		// process render lists - _createObjectPipeline queues work in _compilationPromises
++			}
+ 
+-		const opaqueObjects = renderList.opaque;
+-		const transparentObjects = renderList.transparent;
+-		const transparentDoublePassObjects = renderList.transparentDoublePass;
+-		const lightsNode = renderList.lightsNode;
++			// process render lists - _createObjectPipeline queues work in _compilationPromises
+ 
+-		if ( this.opaque === true && opaqueObjects.length > 0 ) this._renderObjects( opaqueObjects, camera, sceneRef, lightsNode );
+-		if ( this.transparent === true && transparentObjects.length > 0 ) this._renderTransparents( transparentObjects, transparentDoublePassObjects, camera, sceneRef, lightsNode );
++			const opaqueObjects = renderList.opaque;
++			const transparentObjects = renderList.transparent;
++			const transparentDoublePassObjects = renderList.transparentDoublePass;
++			const lightsNode = renderList.lightsNode;
+ 
+-		// restore render tree
++			if ( this.opaque === true && opaqueObjects.length > 0 ) this._renderObjects( opaqueObjects, camera, sceneRef, lightsNode );
++			if ( this.transparent === true && transparentObjects.length > 0 ) this._renderTransparents( transparentObjects, transparentDoublePassObjects, camera, sceneRef, lightsNode );
+ 
+-		nodeFrame.renderId = previousRenderId;
++		} finally {
+ 
+-		this._currentRenderContext = previousRenderContext;
+-		this._currentRenderObjectFunction = previousRenderObjectFunction;
+-		this._handleObjectFunction = previousHandleObjectFunction;
+-		this._compilationPromises = previousCompilationPromises;
++			this._finishPreCompile();
+ 
+-		this._finishPreCompile();
++		}
+ 
+ 		// Process compilation work items sequentially and yield to the main thread after a
+ 		// time budget to keep animation smooth. Pipelines are compiled in parallel while
+@@ -64643,20 +64331,6 @@ class Renderer {
+ 
+ 		};
+ 
+-		const yieldPreCompile = async () => {
+-
+-			if ( scheduler.needsYield() === false ) return;
+-
+-			const activePrecompilationState = this._precompilationState;
+-
+-			this._finishPreCompile();
+-
+-			await scheduler.yield();
+-
+-			this._beginPreCompile( activePrecompilationState );
+-
+-		};
+-
+ 		for ( const item of compilationPromises ) {
+ 
+ 			if ( item.computeNodes !== undefined ) {
+@@ -64680,19 +64354,24 @@ class Renderer {
+ 
+ 			this._beginPreCompile( itemPrecompilationState );
+ 
+-			const renderObject = this._objects.get( item.object, item.material, item.scene, item.camera, item.lightsNode, item.renderContext, item.clippingContext, item.passId );
+-			renderObject.drawRange = item.object.geometry.drawRange;
+-			renderObject.group = item.group;
++			try {
++
++				const renderObject = this._objects.get( item.object, item.material, item.scene, item.camera, item.lightsNode, item.renderContext, item.clippingContext, item.passId );
++				renderObject.drawRange = item.object.geometry.drawRange;
++				renderObject.group = item.group;
+ 
+-			await this._nodes.getForRenderAsync( renderObject, yieldPreCompile );
+-			this._nodes.updateBefore( renderObject );
+-			this._geometries.updateForRender( renderObject );
+-			this._nodes.updateForRender( renderObject );
+-			this._bindings.updateForRender( renderObject );
+-			this._pipelines.getForRender( renderObject, pipelinePromises );
+-			this._nodes.updateAfter( renderObject );
++				this._nodes.updateBefore( renderObject );
++				this._geometries.updateForRender( renderObject );
++				this._nodes.updateForRender( renderObject );
++				this._bindings.updateForRender( renderObject );
++				this._pipelines.getForRender( renderObject, pipelinePromises );
++				this._nodes.updateAfter( renderObject );
+ 
+-			this._finishPreCompile();
++			} finally {
++
++				this._finishPreCompile();
++
++			}
+ 
+ 			if ( pipelinePromises.length > 0 ) {
+ 
+@@ -64721,6 +64400,26 @@ class Renderer {
+ 
+ 	}
+ 
++	/**
++	 * Returns the renderer state a precompilation depends on.
++	 *
++	 * @private
++	 * @return {Object} The precompilation state.
++	 */
++	_getPrecompilationState() {
++
++		return {
++			renderTarget: this._renderTarget,
++			activeCubeFace: this._activeCubeFace,
++			activeMipmapLevel: this._activeMipmapLevel,
++			mrt: this._mrt,
++			contextNode: this.contextNode,
++			renderContext: this._currentRenderContext,
++			item: null
++		};
++
++	}
++
+ 	/**
+ 	 * Sets up the renderer state for precompiling in `compileAsync()`.
+ 	 * The state must be restored with `_finishPreCompile()` before yielding to the main thread,
+@@ -64731,10 +64430,23 @@ class Renderer {
+ 	 */
+ 	_beginPreCompile( precompilationState ) {
+ 
+-		const { useFrameBufferTarget, renderTarget, mrt, renderContext, item } = precompilationState;
++		const { renderTarget, activeCubeFace, activeMipmapLevel, mrt, contextNode, renderContext, item } = precompilationState;
++
++		precompilationState.previousRenderTarget = this._renderTarget;
++		precompilationState.previousActiveCubeFace = this._activeCubeFace;
++		precompilationState.previousActiveMipmapLevel = this._activeMipmapLevel;
++		precompilationState.previousMRT = this._mrt;
++		precompilationState.previousContextNode = this.contextNode;
++		precompilationState.previousRenderContext = this._currentRenderContext;
++		precompilationState.previousRenderObjectFunction = this._currentRenderObjectFunction;
++		precompilationState.previousHandleObjectFunction = this._handleObjectFunction;
++		precompilationState.previousCompilationPromises = this._compilationPromises;
++		precompilationState.previousRenderId = this._nodes.nodeFrame.renderId;
++		precompilationState.previousPrecompilationState = this._precompilationState;
+ 
+-		if ( useFrameBufferTarget === true ) this.setRenderTarget( renderTarget );
++		this.setRenderTarget( renderTarget, activeCubeFace, activeMipmapLevel );
+ 		this.setMRT( mrt );
++		this.contextNode = contextNode;
+ 
+ 		if ( item !== null ) {
+ 
+@@ -64750,9 +64462,7 @@ class Renderer {
+ 
+ 		// node builds take their shared bind groups from the current render context
+ 
+-		precompilationState.previousRenderContext = this._currentRenderContext;
+-
+-		if ( renderContext !== undefined ) this._currentRenderContext = renderContext;
++		this._currentRenderContext = renderContext;
+ 
+ 		this._precompilationState = precompilationState;
+ 
+@@ -64765,18 +64475,23 @@ class Renderer {
+ 	 */
+ 	_finishPreCompile() {
+ 
+-		const { useFrameBufferTarget, outputRenderTarget, activeCubeFace, activeMipmapLevel, outputMRT, previousRenderContext, item, materialSide } = this._precompilationState;
++		const precompilationState = this._precompilationState;
+ 
+-		if ( useFrameBufferTarget === true ) this.setRenderTarget( outputRenderTarget, activeCubeFace, activeMipmapLevel );
+-		this.setMRT( outputMRT );
++		this.setRenderTarget( precompilationState.previousRenderTarget, precompilationState.previousActiveCubeFace, precompilationState.previousActiveMipmapLevel );
++		this.setMRT( precompilationState.previousMRT );
++		this.contextNode = precompilationState.previousContextNode;
+ 
+-		if ( item !== null ) item.material.side = materialSide;
++		if ( precompilationState.item !== null ) precompilationState.item.material.side = precompilationState.materialSide;
+ 
+-		this._currentRenderContext = previousRenderContext;
++		this._currentRenderContext = precompilationState.previousRenderContext;
++		this._currentRenderObjectFunction = precompilationState.previousRenderObjectFunction;
++		this._handleObjectFunction = precompilationState.previousHandleObjectFunction;
++		this._compilationPromises = precompilationState.previousCompilationPromises;
++		this._nodes.nodeFrame.renderId = precompilationState.previousRenderId;
+ 
+ 		this._callDepth --;
+ 
+-		this._precompilationState = null;
++		this._precompilationState = precompilationState.previousPrecompilationState;
+ 
+ 	}
+ 
+@@ -64822,14 +64537,6 @@ class Renderer {
+ 
+ 		};
+ 
+-		const yieldCompile = async () => {
+-
+-			if ( scheduler.needsYield() ) await scheduler.yield();
+-
+-		};
+-
+-		//
+-
+ 		const pipelines = this._pipelines;
+ 		const bindings = this._bindings;
+ 		const nodes = this._nodes;
+@@ -64860,8 +64567,6 @@ class Renderer {
+ 
+ 			}
+ 
+-			await nodes.getForComputeAsync( computeNode, yieldCompile );
+-
+ 			nodes.updateBeforeForCompute( computeNode );
+ 			nodes.updateForCompute( computeNode );
+ 			bindings.updateForCompute( computeNode );
+@@ -64894,7 +64599,7 @@ class Renderer {
+ 
+ 			}
+ 
+-			await yieldCompile();
++			if ( scheduler.needsYield() ) await scheduler.yield();
+ 
+ 		}
+ 
+@@ -67544,8 +67249,7 @@ class Renderer {
+ 	}
+ 
+ 	/**
+-	 * A different implementation for `_handleObjectFunction` which only makes sure the object is ready for rendering.
+-	 * Used in `compileAsync()`.
++	 * A different implementation for `_handleObjectFunction` which queues the object for `compileAsync()`.
+ 	 *
+ 	 * @private
+ 	 * @param {Object3D} object - The 3D object.
+@@ -67559,52 +67263,21 @@ class Renderer {
+ 	 */
+ 	_createObjectPipeline( object, material, scene, camera, lightsNode, group, clippingContext, passId ) {
+ 
+-		// If in async compilation mode, queue the work for sequential execution
+-		if ( this._compilationPromises !== null ) {
+-
+-			// Store work items instead of promises - will be processed sequentially.
+-			// The side is stored since the renderer might have changed it temporarily.
+-			this._compilationPromises.push( {
+-				object,
+-				material,
+-				side: material.side,
+-				scene,
+-				camera,
+-				lightsNode,
+-				group,
+-				clippingContext,
+-				passId,
+-				renderContext: this._currentRenderContext,
+-				precompilationState: {
+-					...this._precompilationState,
+-					useFrameBufferTarget: true,
+-					renderTarget: this.getRenderTarget(),
+-					mrt: this.getMRT(),
+-					renderContext: this._currentRenderContext
+-				}
+-			} );
+-
+-			return;
+-
+-		}
+-
+-		// Sync path
+-		const renderObject = this._objects.get( object, material, scene, camera, lightsNode, this._currentRenderContext, clippingContext, passId );
+-		renderObject.drawRange = object.geometry.drawRange;
+-		renderObject.group = group;
+-
+-		//
+-
+-		this._nodes.updateBefore( renderObject );
+-
+-		this._geometries.updateForRender( renderObject );
+-
+-		this._nodes.updateForRender( renderObject );
+-		this._bindings.updateForRender( renderObject );
+-
+-		this._pipelines.getForRender( renderObject, this._compilationPromises );
+-
+-		this._nodes.updateAfter( renderObject );
++		// Store work items instead of promises - will be processed sequentially.
++		// The side is stored since the renderer might have changed it temporarily.
++		this._compilationPromises.push( {
++			object,
++			material,
++			side: material.side,
++			scene,
++			camera,
++			lightsNode,
++			group,
++			clippingContext,
++			passId,
++			renderContext: this._currentRenderContext,
++			precompilationState: this._getPrecompilationState()
++		} );
+ 
+ 	}
+ 
+diff --git a/src/nodes/core/NodeBuilder.js b/src/nodes/core/NodeBuilder.js
+index cb5ae8e681d2e11dbc959988ff1215167d4b76e9..6a77792d0a73fff9d38245f5ba41e5df4279639c 100644
+--- a/src/nodes/core/NodeBuilder.js
++++ b/src/nodes/core/NodeBuilder.js
+@@ -30,7 +30,7 @@ import { Vector2 } from '../../math/Vector2.js';
+ import { Vector3 } from '../../math/Vector3.js';
+ import { Vector4 } from '../../math/Vector4.js';
+ import { Float16BufferAttribute } from '../../core/BufferAttribute.js';
+-import { warn, error, yieldToMain } from '../../utils.js';
++import { warn, error } from '../../utils.js';
+ 
+ let _id = 0;
+ 
+@@ -3704,70 +3704,6 @@ class NodeBuilder {
+ 
+ 	}
+ 
+-	/**
+-	 * Async version of build() that yields to main thread between shader stages.
+-	 * Use this in compileAsync() to prevent blocking the main thread.
+-	 *
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread.
+-	 * @return {Promise<NodeBuilder>} A promise that resolves to this node builder.
+-	 */
+-	async buildAsync( yieldFn = yieldToMain ) {
+-
+-		this.prebuild();
+-
+-		// setup() -> stage 1: create possible new nodes and/or return an output reference node
+-		// analyze()   -> stage 2: analyze nodes to possible optimization and validation
+-		// generate()  -> stage 3: generate shader
+-
+-		for ( const buildStage of defaultBuildStages ) {
+-
+-			this.setBuildStage( buildStage );
+-
+-			if ( this.context.position && this.context.position.isNode ) {
+-
+-				this.flowNodeFromShaderStage( 'vertex', this.context.position );
+-
+-			}
+-
+-			for ( const shaderStage of shaderStages ) {
+-
+-				this.setShaderStage( shaderStage );
+-
+-				const flowNodes = this.flowNodes[ shaderStage ];
+-
+-				for ( const node of flowNodes ) {
+-
+-					if ( buildStage === 'generate' ) {
+-
+-						this.flowNode( node );
+-
+-					} else {
+-
+-						node.build( this );
+-
+-					}
+-
+-				}
+-
+-				// Yield to main thread after each shader stage to prevent blocking
+-				await yieldFn();
+-
+-			}
+-
+-		}
+-
+-		this.setBuildStage( null );
+-		this.setShaderStage( null );
+-
+-		// stage 4: build code for a specific output
+-
+-		this.buildCode();
+-		this.buildUpdateNodes();
+-
+-		return this;
+-
+-	}
+-
+ 	/**
+ 	 * Returns a uniform representation which is later used for UBO generation and rendering.
+ 	 *
+diff --git a/src/nodes/display/PassNode.js b/src/nodes/display/PassNode.js
+index b540d2ebd28f0c5733e7a999d4d18911eba3629d..b5c9706766d7134d62cd58f58500fc52f35eb4e2 100644
+--- a/src/nodes/display/PassNode.js
++++ b/src/nodes/display/PassNode.js
+@@ -828,12 +828,14 @@ class PassNode extends Node {
+ 
+ 		if ( this.contextNode !== null ) renderer.contextNode = this._getContextNode( renderer );
+ 
+-		await renderer.compileAsync( this.scene, this.camera );
++		const promise = renderer.compileAsync( this.scene, this.camera );
+ 
+ 		renderer.setRenderTarget( currentRenderTarget );
+ 		renderer.setMRT( currentMRT );
+ 		renderer.contextNode = currentContextNode;
+ 
++		await promise;
++
+ 	}
+ 
+ 	setup( { renderer } ) {
+diff --git a/src/renderers/common/Renderer.js b/src/renderers/common/Renderer.js
+index fb1255af55606f4ab915e2798a9174e9e00ee209..47016987d62037839c21688f0f69d8edefe117ff 100644
+--- a/src/renderers/common/Renderer.js
++++ b/src/renderers/common/Renderer.js
+@@ -1020,9 +1020,11 @@ class Renderer {
+ 
+ 		if ( this._isDeviceLost === true ) return;
+ 
++		const precompilationState = this._getPrecompilationState();
++
+ 		if ( this._initialized === false ) await this.init();
+ 
+-		// only awaited when the drawing pipeline prepares something, so the state below is still taken synchronously
++		// only awaited when the drawing pipeline prepares something
+ 
+ 		const prepare = this.drawingPipeline.prepareAsync( scene, camera );
+ 
+@@ -1036,16 +1038,6 @@ class Renderer {
+ 
+ 		}
+ 
+-		// preserve render tree
+-
+-		const nodeFrame = this._nodes.nodeFrame;
+-
+-		const previousRenderId = nodeFrame.renderId;
+-		const previousRenderContext = this._currentRenderContext;
+-		const previousRenderObjectFunction = this._currentRenderObjectFunction;
+-		const previousHandleObjectFunction = this._handleObjectFunction;
+-		const previousCompilationPromises = this._compilationPromises;
+-
+ 		//
+ 
+ 		if ( targetScene === null ) targetScene = scene;
+@@ -1054,138 +1046,129 @@ class Renderer {
+ 		// This ensures cache keys match between compileAsync and render
+ 		const sceneRef = ( scene.isScene === true ) ? scene : ( targetScene.isScene === true ) ? targetScene : _scene;
+ 
+-		// Match render()'s logic: use frameBufferTarget when needsFrameBufferTarget is true
+-		const useFrameBufferTarget = this.needsFrameBufferTarget && this._renderTarget === null;
+-		const outputRenderTarget = this._renderTarget || this._outputRenderTarget;
+-		const useXRCamera = this.xr.isPresenting === true && this.isOutputTarget;
+-		const renderTarget = useFrameBufferTarget ? this._getFrameBufferTarget() : outputRenderTarget;
+-
+-		const activeCubeFace = this._activeCubeFace;
+-		const activeMipmapLevel = this._activeMipmapLevel;
+-
+-		// a state snapshot is taken once at the beginning and reapplied every time precompilation continues.
+-		// `item` is the work item that is currently processed, see `_beginPreCompile()`
++		const compilationPromises = [];
+ 
+-		// the work items always set their render target, without the frame buffer target the current one is restored
++		this._beginPreCompile( precompilationState );
+ 
+-		const precompilationState = { useFrameBufferTarget, renderTarget, outputRenderTarget: useFrameBufferTarget ? outputRenderTarget : this._renderTarget, activeCubeFace, activeMipmapLevel, item: null, materialSide: null, mrt: this._mrt, outputMRT: this._mrt };
++		try {
+ 
+-		this._beginPreCompile( precompilationState );
++			// Match render()'s logic: use frameBufferTarget when needsFrameBufferTarget is true
++			const useFrameBufferTarget = this.needsFrameBufferTarget && this._renderTarget === null;
++			const outputRenderTarget = this._renderTarget || this._outputRenderTarget;
++			const useXRCamera = this.xr.isPresenting === true && this.isOutputTarget;
++			const renderTarget = useFrameBufferTarget ? this._getFrameBufferTarget() : outputRenderTarget;
+ 
+-		const renderContext = this._renderContexts.get( renderTarget, this._mrt, this._callDepth, camera );
++			const { activeMipmapLevel } = precompilationState;
+ 
+-		precompilationState.renderContext = renderContext;
++			if ( useFrameBufferTarget === true ) this.setRenderTarget( renderTarget );
+ 
+-		const compilationPromises = [];
++			const renderContext = this._renderContexts.get( renderTarget, this._mrt, this._callDepth, camera );
+ 
+-		this._currentRenderContext = renderContext;
+-		this._currentRenderObjectFunction = this.renderObject;
++			const nodeFrame = this._nodes.nodeFrame;
+ 
+-		this._handleObjectFunction = this._createObjectPipeline;
++			this._currentRenderContext = renderContext;
++			this._currentRenderObjectFunction = this.renderObject;
+ 
+-		this._compilationPromises = compilationPromises;
++			this._handleObjectFunction = this._createObjectPipeline;
+ 
+-		nodeFrame.renderId ++;
++			this._compilationPromises = compilationPromises;
+ 
+-		//
++			nodeFrame.renderId ++;
+ 
+-		nodeFrame.update();
++			//
+ 
+-		//
++			nodeFrame.update();
+ 
+-		renderContext.depth = this.depth;
+-		renderContext.stencil = this.stencil;
++			//
+ 
+-		if ( ! renderContext.clippingContext ) renderContext.clippingContext = new ClippingContext();
+-		renderContext.clippingContext.updateGlobal( sceneRef, camera );
++			renderContext.depth = this.depth;
++			renderContext.stencil = this.stencil;
+ 
+-		//
++			if ( ! renderContext.clippingContext ) renderContext.clippingContext = new ClippingContext();
++			renderContext.clippingContext.updateGlobal( sceneRef, camera );
+ 
+-		if ( scene.matrixWorldAutoUpdate === true ) scene.updateMatrixWorld();
++			//
+ 
+-		camera = this._updateCamera( camera, useXRCamera );
++			if ( scene.matrixWorldAutoUpdate === true ) scene.updateMatrixWorld();
+ 
+-		//
++			camera = this._updateCamera( camera, useXRCamera );
+ 
+-		sceneRef.onBeforeRender( this, scene, camera, renderTarget );
++			//
+ 
+-		//
++			sceneRef.onBeforeRender( this, scene, camera, renderTarget );
+ 
+-		this.drawingPipeline.begin( camera, renderContext );
++			//
+ 
+-		// Use sceneRef for render list to ensure lightsNode matches between compileAsync and render
+-		const renderList = this._renderLists.get( sceneRef, camera, this.lighting );
+-		this.drawingPipeline.beginRenderList( renderList );
++			this.drawingPipeline.begin( camera, renderContext );
+ 
+-		this.drawingPipeline.project( scene, camera, 0, renderList, renderContext.clippingContext );
++			// Use sceneRef for render list to ensure lightsNode matches between compileAsync and render
++			const renderList = this._renderLists.get( sceneRef, camera, this.lighting );
++			this.drawingPipeline.beginRenderList( renderList );
+ 
+-		// include lights from target scene
+-		if ( targetScene !== scene ) {
++			this.drawingPipeline.project( scene, camera, 0, renderList, renderContext.clippingContext );
+ 
+-			targetScene.traverseVisible( function ( object ) {
++			// include lights from target scene
++			if ( targetScene !== scene ) {
+ 
+-				if ( object.isLight && object.layers.test( camera.layers ) ) {
++				targetScene.traverseVisible( function ( object ) {
+ 
+-					renderList.pushLight( object );
++					if ( object.isLight && object.layers.test( camera.layers ) ) {
+ 
+-				}
++						renderList.pushLight( object );
+ 
+-			} );
++					}
+ 
+-		}
++				} );
+ 
+-		this.drawingPipeline.finishRenderList( renderList );
++			}
+ 
+-		//
++			this.drawingPipeline.finishRenderList( renderList );
+ 
+-		if ( renderTarget !== null ) {
++			//
+ 
+-			this._textures.updateRenderTarget( renderTarget, activeMipmapLevel );
++			if ( renderTarget !== null ) {
+ 
+-			const renderTargetData = this._textures.get( renderTarget );
++				this._textures.updateRenderTarget( renderTarget, activeMipmapLevel );
+ 
+-			renderContext.textures = renderTargetData.textures;
+-			renderContext.depthTexture = renderTargetData.depthTexture;
++				const renderTargetData = this._textures.get( renderTarget );
+ 
+-		} else {
++				renderContext.textures = renderTargetData.textures;
++				renderContext.depthTexture = renderTargetData.depthTexture;
+ 
+-			renderContext.textures = null;
+-			renderContext.depthTexture = null;
++			} else {
+ 
+-		}
++				renderContext.textures = null;
++				renderContext.depthTexture = null;
+ 
+-		//
++			}
+ 
+-		if ( targetScene !== scene ) {
++			//
+ 
+-			this._background.update( targetScene, renderList, renderContext );
++			if ( targetScene !== scene ) {
+ 
+-		} else {
++				this._background.update( targetScene, renderList, renderContext );
+ 
+-			this._background.update( sceneRef, renderList, renderContext );
++			} else {
+ 
+-		}
++				this._background.update( sceneRef, renderList, renderContext );
+ 
+-		// process render lists - _createObjectPipeline queues work in _compilationPromises
++			}
+ 
+-		const opaqueObjects = renderList.opaque;
+-		const transparentObjects = renderList.transparent;
+-		const transparentDoublePassObjects = renderList.transparentDoublePass;
+-		const lightsNode = renderList.lightsNode;
++			// process render lists - _createObjectPipeline queues work in _compilationPromises
+ 
+-		if ( this.opaque === true && opaqueObjects.length > 0 ) this._renderObjects( opaqueObjects, camera, sceneRef, lightsNode );
+-		if ( this.transparent === true && transparentObjects.length > 0 ) this._renderTransparents( transparentObjects, transparentDoublePassObjects, camera, sceneRef, lightsNode );
++			const opaqueObjects = renderList.opaque;
++			const transparentObjects = renderList.transparent;
++			const transparentDoublePassObjects = renderList.transparentDoublePass;
++			const lightsNode = renderList.lightsNode;
+ 
+-		// restore render tree
++			if ( this.opaque === true && opaqueObjects.length > 0 ) this._renderObjects( opaqueObjects, camera, sceneRef, lightsNode );
++			if ( this.transparent === true && transparentObjects.length > 0 ) this._renderTransparents( transparentObjects, transparentDoublePassObjects, camera, sceneRef, lightsNode );
+ 
+-		nodeFrame.renderId = previousRenderId;
++		} finally {
+ 
+-		this._currentRenderContext = previousRenderContext;
+-		this._currentRenderObjectFunction = previousRenderObjectFunction;
+-		this._handleObjectFunction = previousHandleObjectFunction;
+-		this._compilationPromises = previousCompilationPromises;
++			this._finishPreCompile();
+ 
+-		this._finishPreCompile();
++		}
+ 
+ 		// Process compilation work items sequentially and yield to the main thread after a
+ 		// time budget to keep animation smooth. Pipelines are compiled in parallel while
+@@ -1209,20 +1192,6 @@ class Renderer {
+ 
+ 		};
+ 
+-		const yieldPreCompile = async () => {
+-
+-			if ( scheduler.needsYield() === false ) return;
+-
+-			const activePrecompilationState = this._precompilationState;
+-
+-			this._finishPreCompile();
+-
+-			await scheduler.yield();
+-
+-			this._beginPreCompile( activePrecompilationState );
+-
+-		};
+-
+ 		for ( const item of compilationPromises ) {
+ 
+ 			if ( item.computeNodes !== undefined ) {
+@@ -1246,19 +1215,24 @@ class Renderer {
+ 
+ 			this._beginPreCompile( itemPrecompilationState );
+ 
+-			const renderObject = this._objects.get( item.object, item.material, item.scene, item.camera, item.lightsNode, item.renderContext, item.clippingContext, item.passId );
+-			renderObject.drawRange = item.object.geometry.drawRange;
+-			renderObject.group = item.group;
++			try {
+ 
+-			await this._nodes.getForRenderAsync( renderObject, yieldPreCompile );
+-			this._nodes.updateBefore( renderObject );
+-			this._geometries.updateForRender( renderObject );
+-			this._nodes.updateForRender( renderObject );
+-			this._bindings.updateForRender( renderObject );
+-			this._pipelines.getForRender( renderObject, pipelinePromises );
+-			this._nodes.updateAfter( renderObject );
++				const renderObject = this._objects.get( item.object, item.material, item.scene, item.camera, item.lightsNode, item.renderContext, item.clippingContext, item.passId );
++				renderObject.drawRange = item.object.geometry.drawRange;
++				renderObject.group = item.group;
+ 
+-			this._finishPreCompile();
++				this._nodes.updateBefore( renderObject );
++				this._geometries.updateForRender( renderObject );
++				this._nodes.updateForRender( renderObject );
++				this._bindings.updateForRender( renderObject );
++				this._pipelines.getForRender( renderObject, pipelinePromises );
++				this._nodes.updateAfter( renderObject );
++
++			} finally {
++
++				this._finishPreCompile();
++
++			}
+ 
+ 			if ( pipelinePromises.length > 0 ) {
+ 
+@@ -1287,6 +1261,26 @@ class Renderer {
+ 
+ 	}
+ 
++	/**
++	 * Returns the renderer state a precompilation depends on.
++	 *
++	 * @private
++	 * @return {Object} The precompilation state.
++	 */
++	_getPrecompilationState() {
++
++		return {
++			renderTarget: this._renderTarget,
++			activeCubeFace: this._activeCubeFace,
++			activeMipmapLevel: this._activeMipmapLevel,
++			mrt: this._mrt,
++			contextNode: this.contextNode,
++			renderContext: this._currentRenderContext,
++			item: null
++		};
++
++	}
++
+ 	/**
+ 	 * Sets up the renderer state for precompiling in `compileAsync()`.
+ 	 * The state must be restored with `_finishPreCompile()` before yielding to the main thread,
+@@ -1297,10 +1291,23 @@ class Renderer {
+ 	 */
+ 	_beginPreCompile( precompilationState ) {
+ 
+-		const { useFrameBufferTarget, renderTarget, mrt, renderContext, item } = precompilationState;
++		const { renderTarget, activeCubeFace, activeMipmapLevel, mrt, contextNode, renderContext, item } = precompilationState;
++
++		precompilationState.previousRenderTarget = this._renderTarget;
++		precompilationState.previousActiveCubeFace = this._activeCubeFace;
++		precompilationState.previousActiveMipmapLevel = this._activeMipmapLevel;
++		precompilationState.previousMRT = this._mrt;
++		precompilationState.previousContextNode = this.contextNode;
++		precompilationState.previousRenderContext = this._currentRenderContext;
++		precompilationState.previousRenderObjectFunction = this._currentRenderObjectFunction;
++		precompilationState.previousHandleObjectFunction = this._handleObjectFunction;
++		precompilationState.previousCompilationPromises = this._compilationPromises;
++		precompilationState.previousRenderId = this._nodes.nodeFrame.renderId;
++		precompilationState.previousPrecompilationState = this._precompilationState;
+ 
+-		if ( useFrameBufferTarget === true ) this.setRenderTarget( renderTarget );
++		this.setRenderTarget( renderTarget, activeCubeFace, activeMipmapLevel );
+ 		this.setMRT( mrt );
++		this.contextNode = contextNode;
+ 
+ 		if ( item !== null ) {
+ 
+@@ -1316,9 +1323,7 @@ class Renderer {
+ 
+ 		// node builds take their shared bind groups from the current render context
+ 
+-		precompilationState.previousRenderContext = this._currentRenderContext;
+-
+-		if ( renderContext !== undefined ) this._currentRenderContext = renderContext;
++		this._currentRenderContext = renderContext;
+ 
+ 		this._precompilationState = precompilationState;
+ 
+@@ -1331,18 +1336,23 @@ class Renderer {
+ 	 */
+ 	_finishPreCompile() {
+ 
+-		const { useFrameBufferTarget, outputRenderTarget, activeCubeFace, activeMipmapLevel, outputMRT, previousRenderContext, item, materialSide } = this._precompilationState;
++		const precompilationState = this._precompilationState;
+ 
+-		if ( useFrameBufferTarget === true ) this.setRenderTarget( outputRenderTarget, activeCubeFace, activeMipmapLevel );
+-		this.setMRT( outputMRT );
++		this.setRenderTarget( precompilationState.previousRenderTarget, precompilationState.previousActiveCubeFace, precompilationState.previousActiveMipmapLevel );
++		this.setMRT( precompilationState.previousMRT );
++		this.contextNode = precompilationState.previousContextNode;
+ 
+-		if ( item !== null ) item.material.side = materialSide;
++		if ( precompilationState.item !== null ) precompilationState.item.material.side = precompilationState.materialSide;
+ 
+-		this._currentRenderContext = previousRenderContext;
++		this._currentRenderContext = precompilationState.previousRenderContext;
++		this._currentRenderObjectFunction = precompilationState.previousRenderObjectFunction;
++		this._handleObjectFunction = precompilationState.previousHandleObjectFunction;
++		this._compilationPromises = precompilationState.previousCompilationPromises;
++		this._nodes.nodeFrame.renderId = precompilationState.previousRenderId;
+ 
+ 		this._callDepth --;
+ 
+-		this._precompilationState = null;
++		this._precompilationState = precompilationState.previousPrecompilationState;
+ 
+ 	}
+ 
+@@ -1388,14 +1398,6 @@ class Renderer {
+ 
+ 		};
+ 
+-		const yieldCompile = async () => {
+-
+-			if ( scheduler.needsYield() ) await scheduler.yield();
+-
+-		};
+-
+-		//
+-
+ 		const pipelines = this._pipelines;
+ 		const bindings = this._bindings;
+ 		const nodes = this._nodes;
+@@ -1426,8 +1428,6 @@ class Renderer {
+ 
+ 			}
+ 
+-			await nodes.getForComputeAsync( computeNode, yieldCompile );
+-
+ 			nodes.updateBeforeForCompute( computeNode );
+ 			nodes.updateForCompute( computeNode );
+ 			bindings.updateForCompute( computeNode );
+@@ -1460,7 +1460,7 @@ class Renderer {
+ 
+ 			}
+ 
+-			await yieldCompile();
++			if ( scheduler.needsYield() ) await scheduler.yield();
+ 
+ 		}
+ 
+@@ -4110,8 +4110,7 @@ class Renderer {
+ 	}
+ 
+ 	/**
+-	 * A different implementation for `_handleObjectFunction` which only makes sure the object is ready for rendering.
+-	 * Used in `compileAsync()`.
++	 * A different implementation for `_handleObjectFunction` which queues the object for `compileAsync()`.
+ 	 *
+ 	 * @private
+ 	 * @param {Object3D} object - The 3D object.
+@@ -4125,52 +4124,21 @@ class Renderer {
+ 	 */
+ 	_createObjectPipeline( object, material, scene, camera, lightsNode, group, clippingContext, passId ) {
+ 
+-		// If in async compilation mode, queue the work for sequential execution
+-		if ( this._compilationPromises !== null ) {
+-
+-			// Store work items instead of promises - will be processed sequentially.
+-			// The side is stored since the renderer might have changed it temporarily.
+-			this._compilationPromises.push( {
+-				object,
+-				material,
+-				side: material.side,
+-				scene,
+-				camera,
+-				lightsNode,
+-				group,
+-				clippingContext,
+-				passId,
+-				renderContext: this._currentRenderContext,
+-				precompilationState: {
+-					...this._precompilationState,
+-					useFrameBufferTarget: true,
+-					renderTarget: this.getRenderTarget(),
+-					mrt: this.getMRT(),
+-					renderContext: this._currentRenderContext
+-				}
+-			} );
+-
+-			return;
+-
+-		}
+-
+-		// Sync path
+-		const renderObject = this._objects.get( object, material, scene, camera, lightsNode, this._currentRenderContext, clippingContext, passId );
+-		renderObject.drawRange = object.geometry.drawRange;
+-		renderObject.group = group;
+-
+-		//
+-
+-		this._nodes.updateBefore( renderObject );
+-
+-		this._geometries.updateForRender( renderObject );
+-
+-		this._nodes.updateForRender( renderObject );
+-		this._bindings.updateForRender( renderObject );
+-
+-		this._pipelines.getForRender( renderObject, this._compilationPromises );
+-
+-		this._nodes.updateAfter( renderObject );
++		// Store work items instead of promises - will be processed sequentially.
++		// The side is stored since the renderer might have changed it temporarily.
++		this._compilationPromises.push( {
++			object,
++			material,
++			side: material.side,
++			scene,
++			camera,
++			lightsNode,
++			group,
++			clippingContext,
++			passId,
++			renderContext: this._currentRenderContext,
++			precompilationState: this._getPrecompilationState()
++		} );
+ 
+ 	}
+ 
+diff --git a/src/renderers/common/nodes/NodeManager.js b/src/renderers/common/nodes/NodeManager.js
+index 6f6a362a36b34c0b6cf7e3c93e818586822c6f3e..dff1c3bf0d7ba9a661392fb8f9ed87e420981912 100644
+--- a/src/renderers/common/nodes/NodeManager.js
++++ b/src/renderers/common/nodes/NodeManager.js
+@@ -9,7 +9,7 @@ import { builtin } from '../../../nodes/accessors/BuiltinNode.js';
+ 
+ import { EquirectangularReflectionMapping, EquirectangularRefractionMapping } from '../../../constants.js';
+ import { hashArray } from '../../../nodes/core/NodeUtils.js';
+-import { error, yieldToMain } from '../../../utils.js';
++import { error } from '../../../utils.js';
+ 
+ const _chainKeys = [];
+ const _cacheKeyValues = [];
+@@ -79,22 +79,6 @@ class NodeManager extends DataMap {
+ 		 */
+ 		this.groupsData = new ChainMap();
+ 
+-		/**
+-		 * Queue for pending async builds to limit concurrent compilation.
+-		 *
+-		 * @private
+-		 * @type {Array<Function>}
+-		 */
+-		this._buildQueue = [];
+-
+-		/**
+-		 * Whether an async build is currently in progress.
+-		 *
+-		 * @private
+-		 * @type {boolean}
+-		 */
+-		this._buildInProgress = false;
+-
+ 		/**
+ 		 * A cache for managing node objects of
+ 		 * scene properties like fog or environments.
+@@ -188,36 +172,13 @@ class NodeManager extends DataMap {
+ 
+ 	}
+ 
+-	/**
+-	 * Logs an error thrown while building a node material.
+-	 *
+-	 * @private
+-	 * @param {Error} e - The build error.
+-	 */
+-	_reportBuildError( e ) {
+-
+-		let stackTrace = e.stackTrace;
+-
+-		if ( ! stackTrace && e.stack ) {
+-
+-			// Capture stack trace for JavaScript errors
+-
+-			stackTrace = new StackTrace( e.stack );
+-
+-		}
+-
+-		error( 'TSL: ' + e, stackTrace );
+-
+-	}
+-
+ 	/**
+ 	 * Returns a node builder state for the given render object.
+ 	 *
+ 	 * @param {RenderObject} renderObject - The render object.
+-	 * @param {?Function} [yieldFn=null] - If set, the build is async and yields to the main thread via this function.
+-	 * @return {NodeBuilderState|Promise<NodeBuilderState>} The node builder state (or Promise if async).
++	 * @return {NodeBuilderState} The node builder state.
+ 	 */
+-	getForRender( renderObject, yieldFn = null ) {
++	getForRender( renderObject ) {
+ 
+ 		const renderObjectData = this.get( renderObject );
+ 
+@@ -233,80 +194,34 @@ class NodeManager extends DataMap {
+ 
+ 			if ( nodeBuilderState === undefined ) {
+ 
+-				const buildNodeBuilder = async () => {
++				let nodeBuilder = this._createNodeBuilder( renderObject, renderObject.material );
+ 
+-					let nodeBuilder = this._createNodeBuilder( renderObject, renderObject.material );
++				try {
+ 
+-					try {
++					nodeBuilder.build();
+ 
+-						if ( yieldFn !== null ) {
++				} catch ( e ) {
+ 
+-							await nodeBuilder.buildAsync( yieldFn );
++					nodeBuilder = this._createNodeBuilder( renderObject, new NodeMaterial() );
++					nodeBuilder.build();
+ 
+-						} else {
+-
+-							nodeBuilder.build();
+-
+-						}
++					let stackTrace = e.stackTrace;
+ 
+-					} catch ( e ) {
++					if ( ! stackTrace && e.stack ) {
+ 
+-						nodeBuilder = this._createNodeBuilder( renderObject, new NodeMaterial() );
++						// Capture stack trace for JavaScript errors
+ 
+-						if ( yieldFn !== null ) {
+-
+-							await nodeBuilder.buildAsync( yieldFn );
+-
+-						} else {
+-
+-							nodeBuilder.build();
+-
+-						}
+-
+-						this._reportBuildError( e );
++						stackTrace = new StackTrace( e.stack );
+ 
+ 					}
+ 
+-					return nodeBuilder;
++					error( 'TSL: ' + e, stackTrace );
+ 
+-				};
+-
+-				if ( yieldFn !== null ) {
+-
+-					return buildNodeBuilder().then( ( nodeBuilder ) => {
+-
+-						nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+-						if ( nodeBuilder.objectSpecific === false ) nodeBuilderCache.set( cacheKey, nodeBuilderState );
+-						nodeBuilderState.usedTimes ++;
+-						renderObjectData.nodeBuilderState = nodeBuilderState;
+-
+-						return nodeBuilderState;
+-
+-					} );
+-
+-				} else {
+-
+-					// Synchronous path - call buildNodeBuilder but don't await
+-					let nodeBuilder = this._createNodeBuilder( renderObject, renderObject.material );
+-
+-					try {
+-
+-						nodeBuilder.build();
+-
+-					} catch ( e ) {
+-
+-						nodeBuilder = this._createNodeBuilder( renderObject, new NodeMaterial() );
+-						nodeBuilder.build();
+-
+-						this._reportBuildError( e );
+-
+-					}
+-
+-					nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
++				}
+ 
+-					if ( nodeBuilder.objectSpecific === false ) nodeBuilderCache.set( cacheKey, nodeBuilderState );
++				nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+ 
+-				}
++				if ( nodeBuilder.objectSpecific === false ) nodeBuilderCache.set( cacheKey, nodeBuilderState );
+ 
+ 			}
+ 
+@@ -320,115 +235,6 @@ class NodeManager extends DataMap {
+ 
+ 	}
+ 
+-	/**
+-	 * Async version of getForRender() that yields to main thread during build.
+-	 * Use this in compileAsync() to prevent blocking the main thread.
+-	 *
+-	 * @param {RenderObject} renderObject - The render object.
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread.
+-	 * @return {Promise<NodeBuilderState>} A promise that resolves to the node builder state.
+-	 */
+-	getForRenderAsync( renderObject, yieldFn = yieldToMain ) {
+-
+-		const result = this.getForRender( renderObject, yieldFn );
+-
+-		// Ensure we always return a Promise (cache hit returns nodeBuilderState directly)
+-		if ( result.then ) {
+-
+-			return result;
+-
+-		}
+-
+-		return Promise.resolve( result );
+-
+-	}
+-
+-	/**
+-	 * Returns nodeBuilderState if ready, null if pending async build.
+-	 * Queues async build on first call for cache miss.
+-	 * Use this in render() path to enable non-blocking compilation.
+-	 *
+-	 * @param {RenderObject} renderObject - The render object.
+-	 * @return {?NodeBuilderState} The node builder state, or null if still building.
+-	 */
+-	getForRenderDeferred( renderObject ) {
+-
+-		const renderObjectData = this.get( renderObject );
+-
+-		// Already built for this renderObject
+-		if ( renderObjectData.nodeBuilderState !== undefined ) {
+-
+-			return renderObjectData.nodeBuilderState;
+-
+-		}
+-
+-		// Check cache with stable key
+-		const cacheKey = this.getForRenderCacheKey( renderObject );
+-		const nodeBuilderState = this.nodeBuilderCache.get( cacheKey );
+-
+-		if ( nodeBuilderState !== undefined ) {
+-
+-			// Cache hit - use it
+-			nodeBuilderState.usedTimes ++;
+-			renderObjectData.nodeBuilderState = nodeBuilderState;
+-			return nodeBuilderState;
+-
+-		}
+-
+-		// Cache miss - check if async build already queued
+-		if ( renderObjectData.pendingBuild !== true ) {
+-
+-			// Mark as pending and add to build queue
+-			renderObjectData.pendingBuild = true;
+-
+-			this._buildQueue.push( () => {
+-
+-				return this.getForRenderAsync( renderObject ).then( () => {
+-
+-					renderObjectData.pendingBuild = false;
+-
+-				} );
+-
+-			} );
+-
+-			// Start processing queue if not already running
+-			this._processBuildQueue();
+-
+-		}
+-
+-		return null; // Not ready
+-
+-	}
+-
+-	/**
+-	 * Processes the build queue one item at a time.
+-	 * This ensures builds don't all run simultaneously and freeze the main thread.
+-	 *
+-	 * @private
+-	 */
+-	_processBuildQueue() {
+-
+-		if ( this._buildInProgress || this._buildQueue.length === 0 ) {
+-
+-			return;
+-
+-		}
+-
+-		this._buildInProgress = true;
+-
+-		const buildFn = this._buildQueue.shift();
+-
+-		buildFn().then( () => {
+-
+-			this._buildInProgress = false;
+-
+-			// Process next item in queue
+-			this._processBuildQueue();
+-
+-		} );
+-
+-	}
+-
+ 	/**
+ 	 * Deletes the given object from the internal data map
+ 	 *
+@@ -463,11 +269,9 @@ class NodeManager extends DataMap {
+ 	 * Returns a node builder state for the given compute node.
+ 	 *
+ 	 * @param {Node} computeNode - The compute node.
+-	 * @param {boolean} [useAsync=false] - Whether to use async build with yielding.
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread in an async build.
+-	 * @return {NodeBuilderState|Promise<NodeBuilderState>} The node builder state (or Promise if async).
++	 * @return {NodeBuilderState} The node builder state.
+ 	 */
+-	getForCompute( computeNode, useAsync = false, yieldFn = yieldToMain ) {
++	getForCompute( computeNode ) {
+ 
+ 		const computeData = this.get( computeNode );
+ 
+@@ -482,21 +286,6 @@ class NodeManager extends DataMap {
+ 
+ 			if ( onNodeBuilderCreated !== null ) onNodeBuilderCreated( nodeBuilder, computeNode );
+ 
+-			if ( useAsync ) {
+-
+-				return nodeBuilder.buildAsync( yieldFn ).then( () => {
+-
+-					nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+-
+-					computeData.nodeBuilderState = nodeBuilderState;
+-					computeData.version = computeNode.version;
+-
+-					return nodeBuilderState;
+-
+-				} );
+-
+-			}
+-
+ 			nodeBuilder.build();
+ 
+ 			nodeBuilderState = this._createNodeBuilderState( nodeBuilder );
+@@ -510,28 +299,6 @@ class NodeManager extends DataMap {
+ 
+ 	}
+ 
+-	/**
+-	 * Async version of getForCompute() that yields to main thread during build.
+-	 * Use this in compileComputeAsync() to prevent blocking the main thread.
+-	 *
+-	 * @param {Node} computeNode - The compute node.
+-	 * @param {Function} [yieldFn=yieldToMain] - The function used to yield to the main thread.
+-	 * @return {Promise<NodeBuilderState>} A promise that resolves to the node builder state.
+-	 */
+-	getForComputeAsync( computeNode, yieldFn = yieldToMain ) {
+-
+-		const result = this.getForCompute( computeNode, true, yieldFn );
+-
+-		if ( result.then ) {
+-
+-			return result;
+-
+-		}
+-
+-		return Promise.resolve( result );
+-
+-	}
+-
+ 	/**
+ 	 * Creates a node builder state for the given node builder.
+ 	 *

@@ -2,6 +2,7 @@
 
 Status: accepted · 19 Sep 2026 · amended 10 Nov 2026: reconstruction reads
 the optics' masked `motion` and the temporal layout adds reactivity alone.
+Amended by [ADR-0075](0075-three-r187.md): three's own painter sorts stand.
 Supersedes the logarithmic WebGPU depth convention of
 [ADR-0003](0003-render-coordinates.md) and the anti-aliasing renderer remount
 described in [ADR-0029](0029-the-sensor-spine.md).
@@ -52,9 +53,10 @@ and the warm-up stand-in are each built from those rows.
 Depth convention also governs explicit depth writes and ordering. The scene's
 far depth is zero on reversed WebGPU and one on the logarithmic fallback;
 expanded line ribbons derive depth from their emitted clip-space vertex.
-Three r185 reverses the entire draw list for reversed depth, including authored
-layer order. `sceneOrder.ts` compensates the layer and stable-ID keys so a
-galaxy backdrop cannot draw over the foreground.
+Three negates the projected depth key for a reversed-depth camera and keeps
+authored layer order and stable IDs as they are, so its own painter sorts
+draw a galaxy backdrop behind the foreground and need no compensation
+([ADR-0075](0075-three-r187.md)).
 
 `render/upscale.ts` wraps the raw `Upscaler` from `@pmndrs/upscaler` 0.5.0.
 It runs once per render call on three's device, between the small scene pass

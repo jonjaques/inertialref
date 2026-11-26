@@ -16,7 +16,6 @@ import {
   WebGPURenderer,
 } from 'three/webgpu'
 import { breathe } from './warmup.ts'
-import { installSceneOrder } from './sceneOrder.ts'
 
 /*
  * A `WebGPURenderer` on the real GPU, in Node — `pnpm test:gpu`.
@@ -32,15 +31,14 @@ import { installSceneOrder } from './sceneOrder.ts'
  *  - **Nothing here waits for a frame.** The animation frame installed by the
  *    setup file never fires, and every draw is an explicit `render()` into a
  *    `RenderTarget`. A test that waits for a rAF tick is a test that hangs.
- *  - **A pixel readback is padded.** `readRenderTargetPixelsAsync` returns the
- *    mapped staging buffer as-is, and WebGPU aligns every row of it to 256
- *    bytes — so an 8-wide RGBA8 target, whose rows are 32 bytes, reads back
- *    with the second row starting at element 256. Only a width whose row is
- *    already a multiple of 256 escapes it, which the 64-wide default happens
- *    to be, so the default size is the one that proves nothing. `Pixels`
- *    unpacks the padding, and puts row 0 at the **top**, which is where
- *    WebGPU's texture origin is and the opposite of what `gl.readPixels`
- *    trained everyone to expect.
+ *  - **A pixel readback is tight, and row 0 is the top.** WebGPU aligns every
+ *    row of a staging buffer to 256 bytes, and `readRenderTargetPixelsAsync`
+ *    strips that padding before it returns. Only a width whose row is already
+ *    a multiple of 256 cannot tell the two apart, which the 64-wide default
+ *    happens to be, so the default size is the one that proves nothing.
+ *    `Pixels` checks the length against the tight one and puts row 0 at the
+ *    **top**, which is where WebGPU's texture origin is and the opposite of
+ *    what `gl.readPixels` trained everyone to expect.
  *  - **A pipeline that will not build does not reject, on either path.** A
  *    draw builds pipelines synchronously inside the backend's own validation
  *    scope and reports the failure through three's console sink;
@@ -83,7 +81,7 @@ export interface GpuMessage {
   readonly message: string
 }
 
-/** A readback, unpadded, with row 0 at the top of the image. */
+/** A tight readback, with row 0 at the top of the image. */
 export interface Pixels {
   readonly width: number
   readonly height: number
@@ -110,7 +108,7 @@ export interface DrawOptions {
    * target still between a compile and a draw, and a verb that reset the
    * renderer to the swap chain on its way out would break exactly that.
    *
-   * Only `RGBA8` and `RGBA32F` come back readable: `unpad` reads the element
+   * Only `RGBA8` and `RGBA32F` come back readable: `pixelsOf` reads the element
    * type off the staging buffer and rejects anything else rather than
    * truncating it into a plausible-looking `Uint8Array`.
    */
@@ -130,7 +128,7 @@ export interface GpuSession {
   draw(scene: Scene, camera: Camera, options?: DrawOptions): Promise<Pixels>
   /**
    * Read a target something else drew into — the chain, the renderer's own
-   * output path — with the same unpadding `draw` applies to its own.
+   * output path — with the same checks `draw` applies to its own.
    */
   read(target: RenderTarget): Promise<Pixels>
   /**
@@ -246,28 +244,26 @@ function canvasStub(width: number, height: number): HTMLCanvasElement {
 }
 
 /**
- * Unpack a padded readback.
+ * Wrap a readback, after checking it is a tight RGBA one.
  *
- * `readRenderTargetPixelsAsync` hands back the mapped staging buffer whole. Its
- * rows are `bytesPerRow` apart, where that is the tight row rounded up to 256
- * bytes, and only the last row is tight (three sizes the buffer to end there).
- * The stride is recomputed from the same rule rather than trusted from the
- * array's length, because the length alone cannot distinguish a padded 8-wide
- * target from a tight 64-wide one.
+ * `readRenderTargetPixelsAsync` copies the staging buffer's rows, each
+ * aligned to 256 bytes, into a tight array, so element `(y · width + x) · 4`
+ * is texel (x, y). The length is checked rather than trusted, because a
+ * padded readback of an 8-wide target and a tight one of a wider target can
+ * share an element type and differ only in length.
  */
-function unpad(
+function pixelsOf(
   raw: Float32Array | Uint8Array,
   width: number,
   height: number,
 ): Pixels {
   /*
-   * Both assumptions are checked rather than trusted. `bytesPerTexel` is
-   * four channels of whatever the staging buffer's element is, which is true
-   * of `rgba8unorm` and `rgba32float` and of nothing else three can hand back:
-   * a `HalfFloatType` target arrives as a `Uint16Array` and would be copied
-   * element-wise into a `Uint8Array`, truncating every value mod 256 into
-   * numbers that look like pixels. The length check catches the rest — a
-   * single-channel target, where `bytesPerTexel` is four times the real row.
+   * Both assumptions are checked rather than trusted. Four channels of
+   * whatever the staging buffer's element is is true of `rgba8unorm` and
+   * `rgba32float` and of nothing else three can hand back: a
+   * `HalfFloatType` target arrives as a `Uint16Array`, whose values are
+   * half-float bit patterns that look like numbers. The length check catches
+   * the rest — a single-channel target, a quarter of the RGBA length.
    */
   // Widened deliberately: the declared type says two, and the point of the
   // check is the third that three can actually hand back.
@@ -278,23 +274,13 @@ function unpad(
     )
   }
   const channels = 4
-  const bytesPerTexel = raw.BYTES_PER_ELEMENT * channels
-  const bytesPerRow = Math.ceil((width * bytesPerTexel) / 256) * 256
-  const stride = bytesPerRow / raw.BYTES_PER_ELEMENT
-  const tight = width * channels
-  const expected = (height - 1) * stride + tight
+  const expected = width * height * channels
   if (raw.length !== expected) {
     throw new Error(
-      `gpuHarness: a ${width}×${height} readback is ${raw.length} elements where a padded RGBA one is ${expected} — the target is not RGBA`,
+      `gpuHarness: a ${width}×${height} readback is ${raw.length} elements where a tight RGBA one is ${expected} — the target is not RGBA`,
     )
   }
-  const data =
-    raw instanceof Float32Array
-      ? new Float32Array(tight * height)
-      : new Uint8Array(tight * height)
-  for (let row = 0; row < height; row += 1) {
-    data.set(raw.subarray(row * stride, row * stride + tight), row * tight)
-  }
+  const data = raw
   return {
     width,
     height,
@@ -379,7 +365,6 @@ export async function openGpu(
   })
   renderer.setSize(width, height, false)
   await renderer.init()
-  installSceneOrder(renderer)
   // Opaque black, the way `createRenderer` clears — see the file comment.
   renderer.setClearColor(0x000000, 1)
   const backend = renderer.backend as {
@@ -581,7 +566,7 @@ export async function openGpu(
       rt.width,
       rt.height,
     )) as Float32Array | Uint8Array
-    return unpad(raw, rt.width, rt.height)
+    return pixelsOf(raw, rt.width, rt.height)
   }
 
   /**

@@ -22,6 +22,7 @@ import { latticeOrigin, turnBack } from './weatherClock.ts'
 import {
   clearSightShare,
   cloudFieldAt,
+  COLUMN_STEPS,
   columnDepth,
   fieldClock,
   fieldLevel,
@@ -478,38 +479,59 @@ describe('a column', () => {
     'stratocumulus',
     'cirrus-over-cumulus',
     'anvil',
-  ] as const)('%s: is a 512-step integral of the unscaled extinction', (id) => {
-    const weather = regimeWeather(world, id)
-    const clock = fieldClock(weather, 12_345)
-    const sun = { x: 0, y: 1, z: 0 }
-    fc.assert(
-      fc.property(unit, (direction) => {
-        for (let k = 0; k < 3; k += 1) {
-          const level = weather.levels[k]!
-          if (!(level.top > level.base)) continue
-          const profile = levelProfile(level)
-          const thickness = level.top - level.base
-          let sum = 0
-          for (let i = 0; i < 512; i += 1) {
-            const r = world.radius + level.base + ((i + 0.5) / 512) * thickness
-            const at = cloudFieldAt(weather, clock, sun, scale(direction, r), 0)
-            sum += at.fraction * at.sigma
+  ] as const)(
+    '%s: is the midpoint sum of the extinction a ray reads, unscaled',
+    (id) => {
+      const weather = regimeWeather(world, id)
+      const clock = fieldClock(weather, 12_345)
+      const sun = { x: 0, y: 1, z: 0 }
+      fc.assert(
+        fc.property(unit, (direction) => {
+          for (let k = 0; k < 3; k += 1) {
+            const level = weather.levels[k]!
+            if (!(level.top > level.base)) continue
+            const profile = levelProfile(level)
+            const thickness = level.top - level.base
+            let sum = 0
+            for (let i = 0; i < COLUMN_STEPS; i += 1) {
+              const r =
+                world.radius +
+                level.base +
+                ((i + 0.5) / COLUMN_STEPS) * thickness
+              const at = cloudFieldAt(
+                weather,
+                clock,
+                sun,
+                scale(direction, r),
+                0,
+              )
+              sum += at.fraction * at.sigma
+            }
+            const want =
+              ((sum * profile.sigma) / profile.scaled) *
+              (thickness / COLUMN_STEPS)
+            const got = columnDepth(weather, clock, sun, direction, k)
+            // The same samples, so only rounding parts them: cloudFieldAt
+            // takes the height back from a position 6.4e6 m out. Measured
+            // over 20,000 columns of each regime: 4.5e-10 of one step's
+            // full depth, σ·T/256, at worst. How near 256 steps come to
+            // the column itself is COLUMN_STEPS's figure, not a bound: a
+            // cell thinner than a step misses by a share of its own depth.
+            const step = (profile.sigma * thickness) / COLUMN_STEPS
+            expect(Math.abs(got - want)).toBeLessThanOrEqual(1e-8 * step)
           }
-          const want =
-            ((sum * profile.sigma) / profile.scaled) * (thickness / 512)
-          const got = columnDepth(weather, clock, sun, direction, k)
-          // 256 midpoints against 512: the profile and the noise are
-          // piecewise linear between texels, so the two differ at the
-          // kinks by a share of one step's full depth, σ·T/256. Measured
-          // over 400 columns of each of these regimes: 0.021 of a step at
-          // worst, the anvil's; 0.1% of any column deeper than ten steps.
-          const step = (profile.sigma * thickness) / 256
-          expect(Math.abs(got - want)).toBeLessThanOrEqual(0.05 * step)
-        }
-      }),
-      { numRuns: 25 },
-    )
-  })
+        }),
+        {
+          numRuns: 25,
+          // A sliver of cumulus a sixty-fourth of its level tall, which
+          // 256 midpoints miss by a third of a step against 512.
+          examples: [
+            [{ x: 0.7945413643552888, y: -0.60595, z: -0.0390975424858947 }],
+          ],
+        },
+      )
+    },
+  )
 })
 
 describe('the field’s motion', () => {
