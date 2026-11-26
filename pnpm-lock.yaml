@@ -166,6 +166,9 @@ overrides:
   '@takram/three-atmosphere': https://github.com/johnfewell/three-geospatial/releases/download/fork-release-8/takram-three-atmosphere-0.19.1%2Bfork.8.tgz
   '@takram/three-geospatial': file:./vendor/takram-three-geospatial-0.9.1+fork.8.tgz
 
+patchedDependencies:
+  three@0.187.0: 292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7
+
 importers:
 
   .:
@@ -304,16 +307,16 @@ importers:
         version: 1.0.19
       '@pmndrs/upscaler':
         specifier: 0.5.0
-        version: 0.5.0(three@0.187.0)
+        version: 0.5.0(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
       '@react-three/fiber':
         specifier: ^9.8.2
-        version: 9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0)
+        version: 9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
       '@takram/three-atmosphere':
         specifier: https://github.com/johnfewell/three-geospatial/releases/download/fork-release-8/takram-three-atmosphere-0.19.1%2Bfork.8.tgz
-        version: https://github.com/johnfewell/three-geospatial/releases/download/fork-release-8/takram-three-atmosphere-0.19.1%2Bfork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(postprocessing@6.39.6(three@0.187.0))(react@19.3.1)(three@0.187.0)
+        version: https://github.com/johnfewell/three-geospatial/releases/download/fork-release-8/takram-three-atmosphere-0.19.1%2Bfork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)))(postprocessing@6.39.6(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
       '@takram/three-geospatial':
         specifier: file:../../vendor/takram-three-geospatial-0.9.1+fork.8.tgz
-        version: file:vendor/takram-three-geospatial-0.9.1+fork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(react@19.3.1)(three@0.187.0)
+        version: file:vendor/takram-three-geospatial-0.9.1+fork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
       '@tanstack/react-virtual':
         specifier: ^3.14.21
         version: 3.14.21(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -340,7 +343,7 @@ importers:
         version: 1.447.3(@types/react@19.3.0)(react@19.3.1)
       postprocessing:
         specifier: 6.39.6
-        version: 6.39.6(three@0.187.0)
+        version: 6.39.6(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
       radix-ui:
         specifier: ^1.8.1
         version: 1.8.1(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
@@ -367,10 +370,10 @@ importers:
         version: 3.7.0
       three:
         specifier: ^0.187.0
-        version: 0.187.0
+        version: 0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)
       three-clouds-webgpu:
         specifier: https://github.com/johnfewell/three-clouds-webgpu/releases/download/v0.1.0-alpha.9/three-clouds-webgpu-0.1.0-alpha.9.tgz
-        version: https://github.com/johnfewell/three-clouds-webgpu/releases/download/v0.1.0-alpha.9/three-clouds-webgpu-0.1.0-alpha.9.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(@takram/three-atmosphere@https://github.com/johnfewell/three-geospatial/releases/download/fork-release-8/takram-three-atmosphere-0.19.1%2Bfork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(postprocessing@6.39.6(three@0.187.0))(react@19.3.1)(three@0.187.0))(@takram/three-geospatial@file:vendor/takram-three-geospatial-0.9.1+fork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(react@19.3.1)(three@0.187.0))(react@19.3.1)(three@0.187.0)
+        version: https://github.com/johnfewell/three-clouds-webgpu/releases/download/v0.1.0-alpha.9/three-clouds-webgpu-0.1.0-alpha.9.tgz(2c15af19e07adf669c5bed31b9b06a26)
       zustand:
         specifier: ^5.0.15
         version: 5.0.15(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.6.0(react@19.3.1))
@@ -6769,9 +6772,9 @@ snapshots:
 
   '@petamoriken/float16@3.9.3': {}
 
-  '@pmndrs/upscaler@0.5.0(three@0.187.0)':
+  '@pmndrs/upscaler@0.5.0(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))':
     dependencies:
-      three: 0.187.0
+      three: 0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)
 
   '@poppinss/colors@4.1.6':
     dependencies:
@@ -7560,7 +7563,7 @@ snapshots:
 
   '@react-dnd/shallowequal@4.0.2': {}
 
-  '@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0)':
+  '@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))':
     dependencies:
       '@babel/runtime': 7.29.7
       '@types/webxr': 0.5.24
@@ -7571,7 +7574,7 @@ snapshots:
       react-use-measure: 2.1.7(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       scheduler: 0.28.0
       suspend-react: 0.1.3(react@19.3.1)
-      three: 0.187.0
+      three: 0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)
       use-sync-external-store: 1.6.0(react@19.3.1)
       zustand: 5.0.15(@types/react@19.3.0)(react@19.3.1)(use-sync-external-store@1.6.0(react@19.3.1))
     optionalDependencies:
@@ -7774,25 +7777,25 @@ snapshots:
       tailwindcss: 4.3.3
       vite: 8.3.4(@types/node@26.6.5)(esbuild@0.28.2)(jiti@2.7.0)(yaml@2.9.0)
 
-  '@takram/three-atmosphere@https://github.com/johnfewell/three-geospatial/releases/download/fork-release-8/takram-three-atmosphere-0.19.1%2Bfork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(postprocessing@6.39.6(three@0.187.0))(react@19.3.1)(three@0.187.0)':
+  '@takram/three-atmosphere@https://github.com/johnfewell/three-geospatial/releases/download/fork-release-8/takram-three-atmosphere-0.19.1%2Bfork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)))(postprocessing@6.39.6(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))':
     dependencies:
-      '@takram/three-geospatial': file:vendor/takram-three-geospatial-0.9.1+fork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(react@19.3.1)(three@0.187.0)
+      '@takram/three-geospatial': file:vendor/takram-three-geospatial-0.9.1+fork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
       astronomy-engine: 2.1.19
-      postprocessing: 6.39.6(three@0.187.0)
+      postprocessing: 6.39.6(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
       react-merge-refs: 3.0.2(react@19.3.1)
-      three: 0.187.0
+      three: 0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)
       tiny-invariant: 1.3.3
       url-join: 5.2.0
     optionalDependencies:
-      '@react-three/fiber': 9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0)
+      '@react-three/fiber': 9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
       react: 19.3.1
 
-  '@takram/three-geospatial@file:vendor/takram-three-geospatial-0.9.1+fork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(react@19.3.1)(three@0.187.0)':
+  '@takram/three-geospatial@file:vendor/takram-three-geospatial-0.9.1+fork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))':
     dependencies:
       '@petamoriken/float16': 3.9.3
-      '@react-three/fiber': 9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0)
+      '@react-three/fiber': 9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
       react: 19.3.1
-      three: 0.187.0
+      three: 0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)
       tiny-invariant: 1.3.3
       type-fest: 5.10.0
 
@@ -9404,9 +9407,9 @@ snapshots:
     transitivePeerDependencies:
       - preact-render-to-string
 
-  postprocessing@6.39.6(three@0.187.0):
+  postprocessing@6.39.6(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)):
     dependencies:
-      three: 0.187.0
+      three: 0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)
 
   preact@10.29.8: {}
 
@@ -9833,17 +9836,17 @@ snapshots:
 
   tapable@2.3.3: {}
 
-  three-clouds-webgpu@https://github.com/johnfewell/three-clouds-webgpu/releases/download/v0.1.0-alpha.9/three-clouds-webgpu-0.1.0-alpha.9.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(@takram/three-atmosphere@https://github.com/johnfewell/three-geospatial/releases/download/fork-release-8/takram-three-atmosphere-0.19.1%2Bfork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(postprocessing@6.39.6(three@0.187.0))(react@19.3.1)(three@0.187.0))(@takram/three-geospatial@file:vendor/takram-three-geospatial-0.9.1+fork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(react@19.3.1)(three@0.187.0))(react@19.3.1)(three@0.187.0):
+  three-clouds-webgpu@https://github.com/johnfewell/three-clouds-webgpu/releases/download/v0.1.0-alpha.9/three-clouds-webgpu-0.1.0-alpha.9.tgz(2c15af19e07adf669c5bed31b9b06a26):
     dependencies:
-      '@takram/three-atmosphere': https://github.com/johnfewell/three-geospatial/releases/download/fork-release-8/takram-three-atmosphere-0.19.1%2Bfork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(postprocessing@6.39.6(three@0.187.0))(react@19.3.1)(three@0.187.0)
-      '@takram/three-geospatial': file:vendor/takram-three-geospatial-0.9.1+fork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0))(react@19.3.1)(three@0.187.0)
-      three: 0.187.0
+      '@takram/three-atmosphere': https://github.com/johnfewell/three-geospatial/releases/download/fork-release-8/takram-three-atmosphere-0.19.1%2Bfork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)))(postprocessing@6.39.6(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
+      '@takram/three-geospatial': file:vendor/takram-three-geospatial-0.9.1+fork.8.tgz(@react-three/fiber@9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
+      three: 0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7)
       tiny-invariant: 1.3.3
     optionalDependencies:
-      '@react-three/fiber': 9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0)
+      '@react-three/fiber': 9.8.2(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7))
       react: 19.3.1
 
-  three@0.187.0: {}
+  three@0.187.0(patch_hash=292cd7edb2ca5da2b1c795176c9cc9fb4ec34e58fe24d12ac60a47bb49a91cf7): {}
 
   tiny-inflate@1.0.3: {}
 

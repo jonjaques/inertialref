@@ -7,6 +7,7 @@ import {
   type Camera,
   type ComputeNode,
   type Material,
+  type Node,
   type NodeMaterial,
   type Object3D,
   type QuadMesh,
@@ -19,6 +20,7 @@ import { BOOT_PHASE } from '../engine/frameTiming.ts'
 import { runQuadPasses } from './quadPass.ts'
 import type { SceneLayout } from './sceneLayout.ts'
 import { buildsClouds } from './cloudBuild.ts'
+import { dispatchAsync } from './dispatch.ts'
 import { warmTargetFor } from './sceneTarget.ts'
 import { sensorMrt } from './sensorMrt.ts'
 
@@ -256,6 +258,16 @@ function compileRenderable(
  * The previous visibility is restored rather than set to false, because the
  * build-ahead in `Bodies.tsx` warms parts that are already on screen.
  *
+ * **A quad compiles with the vertex stage its draw uses.** `QuadMesh.render`
+ * lends its material three's fullscreen triangle, a vertex node indexed by
+ * `vertexIndex` with no vertex buffer, for the length of the draw. A
+ * `compileAsync` of the quad sees the geometry's position attribute instead,
+ * builds a program the draw never uses, and the first frame builds the one
+ * it owed. The node is lent here too, and held until the compile settles
+ * rather than for its synchronous half: a compile on a renderer still
+ * initializing, or one whose drawing pipeline prepares, builds after an
+ * `await`.
+ *
  * A rejection is swallowed: a pipeline that will not build resurfaces on first
  * draw with a better error than anything worth catching here, and a failed
  * warm-up is a slower first encounter rather than a broken boot.
@@ -266,13 +278,43 @@ export function warmCompile(
 ): Promise<void> {
   const { object, camera, scene } = target
   const wasVisible = object.visible
+  const quad = (object as Partial<QuadMesh>).isQuadMesh === true
+  const material = quad ? ((object as QuadMesh).material as NodeMaterial) : null
+  const vertexNode = material?.vertexNode ?? null
+  if (material !== null)
+    material.vertexNode = fullscreenVertex(object as QuadMesh)
   object.visible = true
   const compiled = renderer.compileAsync(object, camera, scene)
   object.visible = wasVisible
-  return compiled.then(
-    () => undefined,
-    () => undefined,
-  )
+  return compiled
+    .then(
+      () => undefined,
+      () => undefined,
+    )
+    .finally(() => {
+      if (material !== null) material.vertexNode = vertexNode
+    })
+}
+
+let fullscreen: Node | null = null
+
+/**
+ * The vertex node `QuadMesh.render` lends a quad's material: one node, private
+ * to three's module, read back by asking a quad to render into a recorder.
+ */
+function fullscreenVertex(quad: QuadMesh): Node {
+  if (fullscreen === null) {
+    let lent: Node | null = null
+    quad.render({
+      render: () => {
+        lent = (quad.material as NodeMaterial).vertexNode
+      },
+    } as unknown as Renderer)
+    if (lent === null)
+      throw new Error('QuadMesh.render lent no vertex node to its material')
+    fullscreen = lent
+  }
+  return fullscreen
 }
 
 /** One macrotask of air, so timers and the watchdog stay serviced. */
@@ -703,6 +745,8 @@ export function warmByDrawing(
  * `computeAsync` and not `compute`: on a renderer still initializing,
  * `compute` hands back an unawaited `computeAsync` whose rejection the catch
  * never sees; on an initialized one the two are the same synchronous build.
+ * The empty size is lent through `dispatchAsync`, because r187 refuses a
+ * size passed beside a kernel built with `compute(count)`.
  */
 export async function warmCompute(
   renderer: WebGPURenderer,
@@ -710,7 +754,7 @@ export async function warmCompute(
 ): Promise<void> {
   for (const kernel of kernels) {
     try {
-      await renderer.computeAsync(kernel, [0, 1, 1])
+      await dispatchAsync(renderer, kernel, [0, 1, 1])
     } catch (cause) {
       log.warn('a compute warm-up failed', {
         kernel: kernel.name,

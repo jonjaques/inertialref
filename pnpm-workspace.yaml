@@ -48,3 +48,18 @@ overrides:
   # direct dependencies (ERR_PNPM_EXOTIC_SUBDEP). A local file is one of its
   # trusted sources, and the port's own install vendors it for the same reason.
   '@takram/three-geospatial': file:./vendor/takram-three-geospatial-0.9.1+fork.8.tgz
+
+# Upstream fixes three has merged and not yet released, each patched into the
+# release we run and deleted with the release that carries it (ADR-0030).
+# The game loads `build/three.webgpu.js` and `build/three.tsl.js`, not
+# `src/`, so every patch carries its pull request's diff applied to the
+# bundles as well as to the sources it was written against.
+#
+#   three@0.187.0  mrdoob/three.js#35359, merged for r188 as 7d4a7890.
+#                  `compileAsync` builds a render object synchronously again.
+#                  On r187 two compiles in flight share one precompilation
+#                  state, the second throws in `_finishPreCompile` (#35315),
+#                  and its pipeline is registered and never built, so the
+#                  object it was for draws nothing.
+patchedDependencies:
+  three@0.187.0: patches/three@0.187.0.patch

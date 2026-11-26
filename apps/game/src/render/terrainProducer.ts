@@ -36,6 +36,7 @@ import {
   type TerrainKernel,
   uploadSurface,
 } from './terrainKernel.ts'
+import { dispatch } from './dispatch.ts'
 
 /*
  * The GPU tile producer: `HeightfieldSource` over `terrainKernel.ts`.
@@ -340,7 +341,7 @@ export function createTileProducer(
         return
       }
       kernel.total.value = taken.length * kernel.samples
-      renderer.compute(kernel.compute, taken.length * kernel.samples)
+      dispatch(renderer, kernel.compute, taken.length * kernel.samples)
       /*
        * A body that drains is the only one whose water is anything but
        * "none": with the drainage stage's gate closed the kernel writes the
@@ -575,7 +576,7 @@ export function createTileProducer(
       let dispatched = false
       try {
         kernel.total.value = 0
-        renderer.compute(kernel.compute, WORKGROUP)
+        dispatch(renderer, kernel.compute, WORKGROUP)
         dispatched = true
       } catch (cause) {
         fail(cause)
