@@ -249,9 +249,9 @@ function compileRenderable(
  * *synchronous*: what to build is decided before the first `await`, so
  * restoring visibility on the very next line happens in the same task and no
  * unit sphere at the origin can reach a drawn frame. The build itself is
- * queued and runs after the call returns, one object per turn of the event
- * loop, which is why this is not an `async` function: the synchronous half
- * has to stay synchronous. What that half reads of the renderer's state is
+ * queued behind the walk and runs in turns of 8 ms, yielding between them,
+ * which is why this is not an `async` function: the synchronous half has to
+ * stay synchronous. What that half reads of the renderer's state is
  * `warmRenderer`'s concern, and the reason it hands over one renderable at a
  * time.
  *
@@ -266,7 +266,9 @@ function compileRenderable(
  * it owed. The node is lent here too, and held until the compile settles
  * rather than for its synchronous half: a compile on a renderer still
  * initializing, or one whose drawing pipeline prepares, builds after an
- * `await`.
+ * `await`. Two compiles of one material share the lend, and the material's
+ * own node goes back when the last of them settles: given back by the
+ * first, the second would build without it.
  *
  * A rejection is swallowed: a pipeline that will not build resurfaces on first
  * draw with a better error than anything worth catching here, and a failed
@@ -278,11 +280,10 @@ export function warmCompile(
 ): Promise<void> {
   const { object, camera, scene } = target
   const wasVisible = object.visible
-  const quad = (object as Partial<QuadMesh>).isQuadMesh === true
-  const material = quad ? ((object as QuadMesh).material as NodeMaterial) : null
-  const vertexNode = material?.vertexNode ?? null
-  if (material !== null)
-    material.vertexNode = fullscreenVertex(object as QuadMesh)
+  const giveBack =
+    (object as Partial<QuadMesh>).isQuadMesh === true
+      ? lendFullscreen(object as QuadMesh)
+      : null
   object.visible = true
   const compiled = renderer.compileAsync(object, camera, scene)
   object.visible = wasVisible
@@ -291,9 +292,31 @@ export function warmCompile(
       () => undefined,
       () => undefined,
     )
-    .finally(() => {
-      if (material !== null) material.vertexNode = vertexNode
-    })
+    .finally(() => giveBack?.())
+}
+
+/** A quad material's own vertex node, and how many compiles hold the lend. */
+const lends = new WeakMap<
+  NodeMaterial,
+  { readonly own: Node | null; holders: number }
+>()
+
+/** Lend `quad`'s material the fullscreen vertex node; returns the give-back. */
+function lendFullscreen(quad: QuadMesh): () => void {
+  const material = quad.material as NodeMaterial
+  const node = fullscreenVertex(quad)
+  const held = lends.get(material)
+  if (held === undefined) {
+    lends.set(material, { own: material.vertexNode, holders: 1 })
+    material.vertexNode = node
+  } else held.holders += 1
+  return () => {
+    const lend = lends.get(material)!
+    lend.holders -= 1
+    if (lend.holders > 0) return
+    lends.delete(material)
+    material.vertexNode = lend.own
+  }
 }
 
 let fullscreen: Node | null = null
@@ -623,7 +646,7 @@ export function warmAtMount(producer: WarmProducer): void {
     })
 }
 
-/** r185 exposes no pipeline compile method; prepare its actual quad, at its actual output. */
+/** three's `RenderPipeline` has no compile method; prepare its actual quad, at its actual output. */
 export function warmPipeline(
   pipeline: RenderPipeline,
   output: RenderTarget | null = null,
@@ -699,20 +722,19 @@ export function warmSensorPass(
 }
 
 /**
- * Build a quad pass's pipeline by drawing it once into its own target: the
- * recipe for a target of fewer than four channels, which `warmSensorPass`
- * cannot serve.
+ * Build a quad pass's pipeline by drawing it once into its own target.
  *
- * `compileAsync` builds a program after an `await` (`getForRenderAsync`),
- * by when the warm-up has put its target back, and the node builder takes
- * a fragment's output type from the target bound then: `vec4` with none,
- * where an R16F target's draw writes an `f32` and an RG8 one's a `vec2`. The
- * program differs, so the pipeline does, and the first frame builds the one
- * the warm-up owed — measured on the clouds' R16F depth copy, RG8 volume and
- * R16F sun grid, where every four-channel bake built none. A draw binds the
- * target for the whole of its build, which is synchronous: the stall at
- * boot that the census exists to take there. Each pass draws its target's
- * first slice, which whatever owns the target redraws before it reads.
+ * A draw binds the target for the whole of its build, which is synchronous:
+ * the stall at boot that the census exists to take there. The node builder
+ * takes a fragment's output type from the target bound for the build —
+ * `vec4` with none, where an R16F target's draw writes an `f32` and an RG8
+ * one's a `vec2` — so a draw builds the program its target's later draws
+ * use. A compile does as well: with #35359 patched in, each object
+ * `compileAsync` queues builds under the target it was queued with
+ * (ADR-0075), and `warmSensorPass` builds what an R8 or RG8 slice's first
+ * draw uses. The clouds' R16F depth copy, RG8 volume and R16F sun grid warm
+ * by drawing. Each pass draws its target's first slice, which whatever owns
+ * the target redraws before it reads.
  */
 export function warmByDrawing(
   renderer: WebGPURenderer,
@@ -733,13 +755,14 @@ export function warmByDrawing(
 /**
  * Build compute pipelines ahead of their first frame.
  *
- * r185 has no compute compile-ahead: `compute()` builds a kernel's pipeline
- * synchronously at its first dispatch (`createComputePipeline`), which is a
- * main-thread stall inside whatever frame first selects it. This is that
- * dispatch, at boot, with no workgroups: three builds the pipeline and its
- * bindings before it looks at the dispatch size, and a dispatch of nothing
- * runs nothing, so a warm-up neither depends on each kernel's own bounds
- * guard nor writes into a 1 × 1 stand-in. One kernel a macrotask, because
+ * `compute()` builds a kernel's pipeline synchronously at its first dispatch
+ * (`createComputePipeline`), which is a main-thread stall inside whatever
+ * frame first selects it. This is that dispatch, at boot, with no
+ * workgroups: three builds the pipeline and its bindings before it looks at
+ * the dispatch size, and on WebGPU a dispatch of nothing runs nothing, so a
+ * warm-up neither depends on each kernel's own bounds guard nor writes into
+ * a 1 × 1 stand-in. Every caller is a WebGPU-only producer: the WebGL
+ * backend ignores a lent size (`dispatch.ts`). One kernel a macrotask, because
  * each build blocks. Failures are logged and swallowed, as `warmCompile`'s
  * are: a kernel that will not build resurfaces at its first dispatch.
  * `computeAsync` and not `compute`: on a renderer still initializing,
