@@ -33,21 +33,25 @@ const SAMPLES = 128
 const CLOUDS = ['fc-40~-160~3', 'bh-200~60~1']
 
 describe('the factor of the sun', () => {
-  it('is fitted again from two of the field’s clouds within a tenth of the committed pair', () => {
-    const rays = CLOUDS.flatMap((id) => {
-      const spec = FACTOR_CLOUDS.find((cloud) => cloud.id === id)!
-      const field = cutCloud(spec)
-      return FACTOR_SUNS.flatMap((sun) =>
-        keptRays(tracePart(spec, field, sun, SAMPLES, VIEWS)),
-      )
-    })
-    const { pair } = fitPair(rays)
-    const committed = SUN_FACTOR.pairs.cumulus
-    expect(Math.abs(pair.l - committed.l)).toBeLessThan(0.1)
-    expect(Math.abs(pair.a - committed.a)).toBeLessThan(0.1)
-  }, /*
-   * 39.0 s on the Mac mini (Mac18,5, Apple M6) under a load of 5.7 from
-   * other work, 26 s of it outside vitest; thirty times that for the hosted
-   * runner's slow stage, which runs over 5.4 times this Mac's.
-   */ 1_170_000)
+  it(
+    'is fitted again from two of the field’s clouds within a tenth of the committed pair',
+    () => {
+      const rays = CLOUDS.flatMap((id) => {
+        const spec = FACTOR_CLOUDS.find((cloud) => cloud.id === id)!
+        const field = cutCloud(spec)
+        return FACTOR_SUNS.flatMap((sun) =>
+          keptRays(tracePart(spec, field, sun, SAMPLES, VIEWS)),
+        )
+      })
+      const { pair } = fitPair(rays)
+      const committed = SUN_FACTOR.pairs.cumulus
+      expect(Math.abs(pair.l - committed.l)).toBeLessThan(0.1)
+      expect(Math.abs(pair.a - committed.a)).toBeLessThan(0.1)
+    },
+    /*
+     * 39.0 s on the Mac mini (Mac18,5, Apple M6) under a load of 5.7 from
+     * other work, 26 s of it outside vitest; thirty times that for the hosted
+     * runner's slow stage, which runs over 5.4 times this Mac's.
+     */ 1_170_000,
+  )
 })
