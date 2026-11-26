@@ -934,9 +934,13 @@ export function cloudFieldAt(
 }
 
 /**
- * Midpoint steps a column is integrated with. Against 512 it is within a
- * twentieth of one step's full depth on every regime (measured worst 0.021,
- * the anvil's), and within 0.1% of any column deeper than ten steps.
+ * Midpoint steps a column is integrated with. Against 512, over 20,000
+ * columns of each regime: within 0.05 of one step's full depth on all but
+ * cirrus-over-cumulus, and within 0.25% of any column deeper than ten
+ * steps. A clamp's ramp shorter than a step is an edge to a midpoint sum, so
+ * a cell thinner than a few steps misses by a share of its own depth:
+ * cirrus-over-cumulus's worst is a sliver of cumulus a sixty-fourth of its
+ * level tall, 3.04 steps deep against 3.36 at 512 and 3.17 at 4096.
  */
 export const COLUMN_STEPS = 256
 
