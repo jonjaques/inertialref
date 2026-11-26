@@ -420,10 +420,13 @@ function, the float one to a named f32 bound and the integer one bit for bit.
 
 Four things the harness owns, because each cost a round trip to learn:
 
-- **A readback is padded.** `readRenderTargetPixelsAsync` returns the mapped
-  staging buffer whole, with every row aligned to 256 bytes — an 8-wide RGBA8
-  target reads back with its second row at element 256. `Pixels` unpacks it,
-  and puts row 0 at the **top**, which is where WebGPU's texture origin is.
+- **A readback is tight, and row 0 is the top.** WebGPU aligns every row of a
+  staging buffer to 256 bytes, and `readRenderTargetPixelsAsync` strips that
+  padding before it returns, so element `(y · width + x) · 4` is texel
+  (x, y). Only a width whose row is already a multiple of 256 bytes cannot
+  tell the two apart, which the 64-wide RGBA8 default is. `Pixels` checks
+  the length against the tight one, and puts row 0 at the **top**, which is
+  where WebGPU's texture origin is.
 - **A pipeline that will not build does not reject.** A draw builds it inside
   the backend's own validation scope and reports through three's console
   sink; `compileAsync` builds it with `createRenderPipelineAsync`, whose
