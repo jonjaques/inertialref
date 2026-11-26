@@ -171,9 +171,8 @@ export interface CloudSystem {
 }
 
 /** `createCloudSystem`, with the maker of the handle an engine holds for it. */
-export interface CloudSystemFactory {
+export interface CloudSystemFactory extends CloudChainFactory {
   (deps: CloudSystemDeps): CloudSystem
-  readonly createFront: () => CloudFrontHandle
 }
 
 /**
@@ -187,6 +186,8 @@ export type CloudChainSystem = Omit<CloudSystem, 'resources' | 'field'>
 export interface CloudChainFactory {
   (deps: CloudSystemDeps): CloudChainSystem
   readonly createFront: () => CloudFrontHandle
+  /** Whether this renderer reads the picture's weather lever. */
+  readonly appliesWeather: boolean
 }
 
 /** The profile and statistics table, RGBA16F: not a resource of its own, 48 KB the report counts. */
@@ -396,6 +397,7 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
       leversHash: levers === null ? null : cloudLeversHash(levers),
       served: shown?.served.address ?? null,
       second: shown?.second?.address ?? null,
+      appliedWeather: shown?.levers.weather ?? null,
       regime: shown?.regime ?? 'off',
       reset: shown?.reset ?? 'none',
       extents:
@@ -571,4 +573,5 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
 export const createCloudSystem: CloudSystemFactory =
   /*@__PURE__*/ Object.assign(buildCloudSystem, {
     createFront: createCloudFrontHandle,
+    appliesWeather: true,
   })

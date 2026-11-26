@@ -3,6 +3,7 @@ import { extendTailwindMerge } from 'tailwind-merge'
 
 /*
  * shadcn/ui's class merger, at the path its registry hard-codes.
+ * Source: https://github.com/shadcn-ui/ui
  *
  * Every component `pnpm dlx shadcn add` writes imports `cn` from `@/lib/utils`
  * by that exact string, so this file's location is fixed by the tool rather

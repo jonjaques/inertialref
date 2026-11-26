@@ -1,3 +1,4 @@
+// Adapted from the shadcn/ui registry: https://ui.shadcn.com/docs/components/tabs
 import * as React from 'react'
 import { cva, type VariantProps } from 'class-variance-authority'
 import { Tabs as TabsPrimitive } from 'radix-ui'

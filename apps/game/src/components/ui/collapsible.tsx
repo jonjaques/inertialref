@@ -1,5 +1,6 @@
 'use client'
 
+// Adapted from the shadcn/ui registry: https://ui.shadcn.com/docs/components/collapsible
 import { Collapsible as CollapsiblePrimitive } from 'radix-ui'
 
 function Collapsible({

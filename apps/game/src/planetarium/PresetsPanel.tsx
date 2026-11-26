@@ -22,7 +22,7 @@ const QUICK_SHOTS = ['earthrise', 'centauri-daybreak', 'far-shore']
  * the light and the step back beside them: all three move the camera relative
  * to the current subject in one press, and three collapsible headings nested
  * inside a fourth, closed, was two clicks to reach the sixteen thumbnails this
- * panel is proudest of. The clouds' pictures follow while the clouds are on,
+ * panel is proudest of. The clouds' pictures follow where the page can draw clouds,
  * and the Milky Way is the one section closed on arrival.
  */
 export function PresetsPanel(context: PlanetariumContext) {
@@ -64,7 +64,7 @@ export function PresetsPanel(context: PlanetariumContext) {
       >
         <CompositionControls {...context} />
       </Section>
-      <CloudsSection {...context} />
+      <CloudsSection takePicture={context.takePicture} />
       <GalaxySection {...context} />
     </div>
   )

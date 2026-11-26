@@ -5,6 +5,506 @@ This product includes software developed as part of the InertialRef project,
 licensed under the Apache License, Version 2.0. See LICENSE.
 
 --------------------------------------------------------------------------------
+Software
+--------------------------------------------------------------------------------
+
+The browser and Worker include the works below. Their upstream terms and
+copyright notices travel with the production build in third-party-licenses.txt.
+
+Three.js
+  three.js authors, https://github.com/mrdoob/three.js
+  Licensed MIT.
+  WebGPU and WebGL rendering, scene graphs and glTF loading.
+  Packages: three
+
+React Three Fiber and pmndrs helpers
+  Poimandres, Paul Henschel and Cody Bennett, https://github.com/pmndrs/react-three-fiber
+  Licensed MIT.
+  Three.js scene management in React, context and sizing.
+  Packages: @react-three/fiber, its-fine, react-use-measure, suspend-react
+
+three-clouds-webgpu
+  John Fewell and Shota Matsuda, https://github.com/johnfewell/three-clouds-webgpu
+  Licensed MIT.
+  WebGPU port of Takram’s cloud renderer and its baked textures.
+  Packages: three-clouds-webgpu
+
+Takram three-geospatial and three-atmosphere
+  Shota Matsuda and John Fewell, https://github.com/johnfewell/three-geospatial/releases/tag/fork-release-7
+  Licensed MIT.
+  Fewell’s release 7 adds four-lane ray–sphere intersections, fixes the
+  atmospheric scattering kernels for Three.js r186 and marks the fork in both
+  packages. InertialRef vendors the geospatial release tarball unchanged.
+  Packages: @takram/three-geospatial, @takram/three-atmosphere
+
+Precomputed Atmospheric Scattering reference implementation
+  Eric Bruneton and INRIA, https://ebruneton.github.io/precomputed_atmospheric_scattering/
+  Licensed BSD-3-Clause.
+  Atmosphere lookup tables and shader code in Takram’s atmosphere fork.
+
+Unreal Engine Sky Atmosphere sample
+  Epic Games, Inc. and Sébastien Hillaire, https://github.com/sebh/UnrealEngineSkyAtmosphere
+  Licensed MIT.
+  Multiple-scattering shader code in Takram’s atmosphere fork.
+
+Epipolar light scattering sample
+  Intel Corporation, https://github.com/GameTechDev/OutdoorLightScattering
+  Licensed Apache-2.0.
+  Shadow-length code in Takram’s atmosphere fork.
+
+Bend Studio screen-space shadows
+  Sony Interactive Entertainment, https://www.bendstudio.com/blog/inside-bend-screen-space-shadows/
+  Licensed Apache-2.0.
+  Screen-space shadow node in the vendored geospatial package.
+
+three-csm
+  vtHawk and three.js authors, https://github.com/StrandedKitty/three-csm
+  Licensed MIT.
+  Cascaded shadow frustum splits in the cloud port.
+
+OpenGL Mathematics
+  G-Truc Creation, https://github.com/g-truc/glm/blob/master/glm/gtc/noise.inl
+  Licensed MIT or Happy Bunny.
+  Classic Perlin noise code in the cloud port.
+
+TileableVolumeNoise
+  Sébastien Hillaire, https://github.com/sebh/TileableVolumeNoise
+  Licensed MIT.
+  Tileable noise code in the cloud port.
+
+Structured Volume Sampling
+  Huw Bowles, Daniel Zimmermann and Beibei Wang, https://github.com/huwb/volsample
+  Licensed MIT.
+  Structured ray-march sampling in the cloud port.
+
+Playdead temporal reprojection
+  Playdead, https://github.com/playdeadgames/temporal
+  Licensed MIT.
+  Variance clipping in the cloud port’s temporal resolve.
+
+MJP Catmull-Rom sampling
+  MJP, https://gist.github.com/TheRealMJP/c83b8c0f46b63f3a88a5986f4fa982b1
+  Licensed MIT.
+  History texture sampling in the cloud port’s temporal resolve.
+
+Postprocessing
+  Raoul van Rüschen, https://github.com/pmndrs/postprocessing
+  Licensed Zlib.
+  Postprocessing support for the atmosphere and cloud dependencies.
+  Packages: postprocessing
+
+pmndrs upscaler
+  Dennis Smolek, https://github.com/pmndrs/upscaler
+  Licensed MIT.
+  Spatial reconstruction and sharpening through the EASU and RCAS shader
+  ports.
+  Packages: @pmndrs/upscaler
+
+AMD FidelityFX FSR 1
+  Advanced Micro Devices, Inc., https://github.com/GPUOpen-Effects/FidelityFX-FSR
+  Licensed MIT.
+  EASU and RCAS shader code ported by the pmndrs upscaler.
+
+React
+  Meta Platforms, Inc. and affiliates, https://github.com/react/react
+  Licensed MIT.
+  Page rendering, hydration, scheduling and scene reconciliation.
+  Packages: react, react-dom, scheduler, use-sync-external-store
+
+React Router
+  React Training LLC, Remix Software Inc. and Shopify Inc., https://github.com/remix-run/react-router
+  Licensed MIT.
+  Client navigation and route state.
+  Packages: react-router
+
+Astro and its React integration
+  Fred K. Schott and Astro contributors, https://github.com/withastro/astro
+  Licensed MIT.
+  Static pages and the browser code that hydrates the game shell.
+  Packages: astro, @astrojs/react
+
+Vite browser helpers
+  Evan You and Vite contributors, https://github.com/vitejs/vite
+  Licensed MIT.
+  Preload and module-loading code in the built browser scripts.
+  Packages: vite
+
+Radix Primitives
+  WorkOS, https://github.com/radix-ui/primitives
+  Licensed MIT.
+  Accessible dialogs, tabs, sliders, toggles, switches, tooltips and their
+  shared hooks.
+  Packages: @radix-ui/number, @radix-ui/primitive, @radix-ui/react-collapsible, @radix-ui/react-collection, @radix-ui/react-compose-refs, @radix-ui/react-context, @radix-ui/react-dialog, @radix-ui/react-direction, @radix-ui/react-dismissable-layer, @radix-ui/react-focus-guards, @radix-ui/react-focus-scope, @radix-ui/react-id, @radix-ui/react-popper, @radix-ui/react-portal, @radix-ui/react-presence, @radix-ui/react-primitive, @radix-ui/react-roving-focus, @radix-ui/react-separator, @radix-ui/react-slider, @radix-ui/react-slot, @radix-ui/react-switch, @radix-ui/react-tabs, @radix-ui/react-toggle, @radix-ui/react-toggle-group, @radix-ui/react-tooltip, @radix-ui/react-use-callback-ref, @radix-ui/react-use-controllable-state, @radix-ui/react-use-effect-event, @radix-ui/react-use-is-hydrated, @radix-ui/react-use-layout-effect, @radix-ui/react-use-size, @radix-ui/react-visually-hidden
+
+shadcn/ui
+  shadcn, https://github.com/shadcn-ui/ui
+  Licensed MIT.
+  Registry components and the class-merging helper in the game’s source.
+
+Floating UI
+  Floating UI contributors, https://github.com/floating-ui/floating-ui
+  Licensed MIT.
+  Tooltip placement.
+  Packages: @floating-ui/core, @floating-ui/dom, @floating-ui/react-dom, @floating-ui/utils
+
+aria-hidden
+  Anton Korzunov, https://github.com/theKashey/aria-hidden
+  Licensed MIT.
+  Hides background content from assistive technology when a modal opens.
+  Packages: aria-hidden
+
+Lucide and Feather
+  Lucide Icons and contributors, and Cole Bemis, https://github.com/lucide-icons/lucide
+  Licensed ISC and MIT.
+  Interface icons.
+  Packages: lucide-react
+
+Motion
+  Motion B.V. and Framer B.V., https://github.com/motiondivision/motion
+  Licensed MIT.
+  Interface transitions and gestures.
+  Packages: motion, motion-dom, motion-utils, framer-motion
+
+React DnD
+  Dan Abramov, React DnD contributors, Facebook and Alberto Leal, https://github.com/react-dnd/react-dnd
+  Licensed MIT.
+  Pointer and touch dragging of workspace panels.
+  Packages: react-dnd, react-dnd-html5-backend, react-dnd-touch-backend, dnd-core, @react-dnd/asap, @react-dnd/invariant, @react-dnd/shallowequal
+
+Redux
+  Dan Abramov, https://github.com/reduxjs/redux
+  Licensed MIT.
+  Drag-and-drop state inside React DnD.
+  Packages: redux
+
+Zustand
+  Paul Henschel, https://github.com/pmndrs/zustand
+  Licensed MIT.
+  Client stores for preferences and simulation snapshots.
+  Packages: zustand
+
+TanStack Virtual and Query Core
+  Tanner Linsley, https://github.com/TanStack
+  Licensed MIT.
+  Virtualized lists and Clerk’s query cache.
+  Packages: @tanstack/react-virtual, @tanstack/virtual-core, @tanstack/query-core
+
+uFuzzy
+  Leon Sorokin, https://github.com/leeoniya/uFuzzy
+  Licensed MIT.
+  Catalog and target search.
+  Packages: @leeoniya/ufuzzy
+
+Tailwind CSS
+  Tailwind Labs, Inc., https://github.com/tailwindlabs/tailwindcss
+  Licensed MIT.
+  Generated styles and browser style resets.
+  Packages: tailwindcss
+
+tw-animate-css
+  Luca Bosin (Wombosvideo), https://github.com/Wombosvideo/tw-animate-css
+  Licensed MIT.
+  CSS animation utilities.
+  Packages: tw-animate-css
+
+tailwind-merge
+  Dany Castillo, https://github.com/dcastil/tailwind-merge
+  Licensed MIT.
+  Utility class merging.
+  Packages: tailwind-merge
+
+Class Variance Authority
+  Joe Bell, https://github.com/joe-bell/cva
+  Licensed Apache-2.0.
+  Component style variants.
+  Packages: class-variance-authority
+
+clsx and dequal
+  Luke Edwards, https://github.com/lukeed
+  Licensed MIT.
+  Conditional CSS classes and equality checks.
+  Packages: clsx, dequal
+
+fast-deep-equal
+  Evgeny Poberezkin, https://github.com/epoberezkin/fast-deep-equal
+  Licensed MIT.
+  Equality checks in drag-and-drop.
+  Packages: fast-deep-equal
+
+tiny-invariant
+  Alexander Reardon, https://github.com/alexreardon/tiny-invariant
+  Licensed MIT.
+  Assertions in the cloud stack.
+  Packages: tiny-invariant
+
+Clerk
+  Clerk, Inc., https://github.com/clerk/javascript
+  Licensed MIT.
+  Browser sign-in and Worker-side account and session verification.
+  Packages: @clerk/react, @clerk/backend, @clerk/shared
+
+Standard Webhooks
+  Svix and Standard Webhooks contributors, https://github.com/standard-webhooks/standard-webhooks
+  Licensed MIT (published JavaScript package).
+  Clerk webhook signature verification in the Worker.
+  Packages: standardwebhooks
+
+StableLib Base64 and fast-sha256
+  Dmitry Chestnykh, https://github.com/StableLib/stablelib
+  Licensed MIT and Unlicense, respectively.
+  Webhook encoding and signature hashing in the Worker. fast-sha256 source:
+  https://github.com/dchest/fast-sha256-js
+  Packages: @stablelib/base64, fast-sha256
+
+cookie
+  Roman Shtylman and Douglas Christopher Wilson, https://github.com/jshttp/cookie
+  Licensed MIT.
+  Cookie parsing in Clerk’s Worker SDK.
+  Packages: cookie
+
+change-case
+  Blake Embrey, https://github.com/blakeembrey/change-case
+  Licensed MIT.
+  Converts field names in Clerk API requests.
+  Packages: change-case
+
+map-obj
+  Sindre Sorhus, https://github.com/sindresorhus/map-obj
+  Licensed MIT.
+  Maps object keys in Clerk API requests.
+  Packages: map-obj
+
+snakecase-keys
+  Ben Drucker, https://github.com/bendrucker/snakecase-keys
+  Licensed MIT.
+  Serializes Clerk API request keys.
+  Packages: snakecase-keys
+
+PostHog browser SDK
+  PostHog (Hiberly, Inc.), Mixpanel, Inc. and contributors, https://github.com/PostHog/posthog-js
+  Licensed Apache-2.0 and MIT, with upstream notices.
+  Opt-in telemetry.
+  Packages: posthog-js
+
+Mermaid
+  Knut Sveidqvist and Yokozuna59, https://github.com/mermaid-js/mermaid
+  Licensed MIT.
+  Documentation diagrams and diagram parsing.
+  Packages: mermaid, @mermaid-js/parser
+
+Chevrotain
+  Shahar Soel and Chevrotain contributors, https://github.com/Chevrotain/chevrotain
+  Licensed Apache-2.0.
+  Grammar parsing for Mermaid.
+  Packages: chevrotain, @chevrotain/gast, @chevrotain/regexp-to-ast, @chevrotain/utils
+
+D3 and InternMap
+  Mike Bostock, Robert Penner, Cynthia Brewer, Mark Harrower and The Pennsylvania State University, https://github.com/d3
+  Licensed ISC and BSD-3-Clause.
+  Diagram scales, shapes, layouts, transitions, colors and maps.
+  Packages: d3, d3-array, d3-axis, d3-brush, d3-color, d3-dispatch, d3-ease, d3-format, d3-hierarchy, d3-interpolate, d3-path, d3-sankey, d3-scale, d3-scale-chromatic, d3-selection, d3-shape, d3-time, d3-time-format, d3-timer, d3-transition, d3-zoom, internmap
+
+Cytoscape and graph layouts
+  The Cytoscape Consortium and iVis at Bilkent, https://github.com/cytoscape/cytoscape.js
+  Licensed MIT.
+  Graph rendering and layout for Mermaid.
+  Packages: cytoscape, cytoscape-cose-bilkent, cytoscape-fcose, cose-base, layout-base
+
+dagre-d3-es
+  Chris Pettitt, Thibaut Lassalle, David Newell, Alois Klink, Sidharth Vinod and contributors, https://github.com/tbo47/dagre-es
+  Licensed MIT.
+  Directed graph layout for Mermaid.
+  Packages: dagre-d3-es
+
+Eclipse Layout Kernel (elkjs)
+  Ulf Rüegg, Kiel University and Eclipse ELK contributors, https://github.com/kieler/elkjs/tree/0.9.3
+  Licensed EPL-2.0.
+  Graph layout in Mermaid. The elkjs 0.9.3 release uses ELK 0.9.1 with the
+  port-placement patch from its release notes. Source:
+  https://github.com/kieler/elkjs/releases/tag/0.9.3
+  Packages: elkjs
+
+GWT runtime
+  Google Inc. and GWT contributors, https://github.com/gwtproject/gwt/tree/2.10.0
+  Licensed Apache-2.0.
+  Java runtime emulation compiled into elkjs.
+
+Guava
+  The Guava Authors, https://github.com/google/guava/tree/v31.1
+  Licensed Apache-2.0.
+  Collections and utilities compiled into elkjs.
+
+Eclipse Modeling Framework for GWT
+  IBM Corporation and contributors, https://repo.maven.apache.org/maven2/com/genmymodel/emf/gwt/
+  Licensed EPL-1.0.
+  The emf-common and emf-ecore 2.12.4 graph model support compiled into elkjs.
+  Both source JARs are available at the linked repository.
+
+Eclipse Xtext Xbase library
+  itemis AG and contributors, https://repo.maven.apache.org/maven2/org/eclipse/xtext/org.eclipse.xtext.xbase.lib/2.28.0/
+  Licensed EPL-2.0.
+  Xbase 2.28.0 language helpers compiled into elkjs. The source JAR is
+  available at the linked repository.
+
+web-worker
+  Google LLC, https://github.com/developit/web-worker
+  Licensed Apache-2.0.
+  Worker shim included in elkjs.
+
+Rough.js and its geometry helpers
+  Preet Shihn, https://github.com/pshihn/rough
+  Licensed MIT.
+  Sketch-style diagram strokes and fills.
+  Packages: roughjs, hachure-fill, path-data-parser, points-on-curve, points-on-path
+
+Venn.js
+  Ben Frederickson and Samuel Gratzl, https://github.com/upsetjs/venn.js
+  Licensed MIT.
+  Venn diagram geometry.
+  Packages: @upsetjs/venn.js
+
+DOMPurify
+  Mario Heiderich and Cure53, https://github.com/cure53/DOMPurify
+  Licensed Apache-2.0 or MPL-2.0.
+  Sanitizes Mermaid markup.
+  Packages: dompurify
+
+sanitize-url
+  Braintree, https://github.com/braintree/sanitize-url
+  Licensed MIT.
+  Sanitizes diagram links.
+  Packages: @braintree/sanitize-url
+
+KaTeX
+  Khan Academy, Design Science, Inc. and contributors, https://github.com/KaTeX/KaTeX
+  Licensed MIT, with OFL-1.1 notices in upstream sources.
+  Mathematics in Mermaid labels.
+  Packages: katex
+
+Marked
+  Christopher Jeffrey and MarkedJS contributors, https://github.com/markedjs/marked
+  Licensed MIT.
+  Markdown in Mermaid labels.
+  Packages: marked
+
+Day.js
+  iamkun, https://github.com/iamkun/dayjs
+  Licensed MIT.
+  Dates in timeline diagrams.
+  Packages: dayjs
+
+Iconify utilities
+  Vjacheslav Trushkin, https://github.com/iconify/iconify
+  Licensed MIT.
+  Mermaid icon processing.
+  Packages: @iconify/utils
+
+Khroma
+  Fabio Spampinato and Andrew Maney, https://github.com/fabiospampinato/khroma
+  Licensed MIT.
+  Diagram palette arithmetic.
+  Packages: khroma
+
+Stylis
+  Sultan Tarimo, https://github.com/thysultan/stylis
+  Licensed MIT.
+  Diagram CSS processing.
+  Packages: stylis
+
+Lodash and es-toolkit
+  OpenJS Foundation and contributors, Jeremy Ashkenas, and Viva Republica, Inc., https://github.com/lodash/lodash
+  Licensed MIT.
+  Collection and object operations in the diagram stack. es-toolkit source:
+  https://github.com/toss/es-toolkit
+  Packages: lodash-es, es-toolkit
+
+ts-dedent
+  Tamino Martinius, https://github.com/tamino-martinius/node-ts-dedent
+  Licensed MIT.
+  Indentation handling for diagram text.
+  Packages: ts-dedent
+
+uuid
+  Robert Kieffer and contributors, https://github.com/uuidjs/uuid
+  Licensed MIT.
+  Mermaid diagram identifiers.
+  Packages: uuid
+
+Archivo
+  The Archivo Project Authors, https://github.com/Omnibus-Type/Archivo
+  Licensed OFL-1.1.
+  Interface display type.
+  Packages: @fontsource-variable/archivo
+
+IBM Plex Sans and Mono
+  IBM Corp., https://github.com/IBM/plex
+  Licensed OFL-1.1.
+  Interface text, readouts and a local subset of symbols.
+  Packages: @fontsource-variable/ibm-plex-sans, @fontsource/ibm-plex-mono
+
+Noto Sans Math and Noto Sans Symbols
+  Google LLC and The Noto Project Authors, https://github.com/notofonts
+  Licensed OFL-1.1.
+  Mathematical characters and symbols, including a local math subset.
+  Packages: @fontsource/noto-sans-math, @fontsource/noto-sans-symbols
+
+--------------------------------------------------------------------------------
+Techniques
+--------------------------------------------------------------------------------
+
+Precomputed Atmospheric Scattering
+  Eric Bruneton and Fabrice Neyret, https://doi.org/10.1111/j.1467-8659.2008.01245.x
+  Precomputed transmittance lookups in the native atmosphere.
+
+A Scalable and Production Ready Sky and Atmosphere Rendering Technique
+  Sébastien Hillaire, https://doi.org/10.1111/cgf.14050
+  Isotropic multiple-scattering estimate in the native atmosphere.
+
+TileableVolumeNoise
+  Sébastien Hillaire, https://github.com/sebh/TileableVolumeNoise
+  Perlin–Worley cloud shapes.
+
+Nubis, Evolved
+  Andrew Schneider and Guerrilla, https://advances.realtimerendering.com/s2022/SIGGRAPH2022-Advances-NubisEvolved-NoVideos.pdf
+  A distance-dependent minimum step for the native cloud march.
+
+Nubis Cubed
+  Andrew Schneider and Guerrilla, https://advances.realtimerendering.com/s2023/Nubis%20Cubed%20(Advances%202023).pdf
+  An eye-local volume and grid of cloud optical depth toward the sun.
+
+Interleaved Gradient Noise
+  Jorge Jimenez, https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare/
+  Screen-space jitter for the native cloud march.
+
+The Unreasonable Effectiveness of Quasirandom Sequences
+  Martin Roberts, https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+  R1 and R2 sequence fractions advance the cloud jitter each frame.
+
+Spatiotemporal Blue Noise Masks
+  Alan Wolfe, Nathan Morrical, Tomas Akenine-Möller and Ravi Ramamoorthi, https://arxiv.org/abs/2112.09629
+  The generator and sampling scheme for InertialRef’s own cloud jitter mask.
+
+Hash Functions for GPU Rendering
+  Mark Jarzynski and Marc Olano, https://jcgt.org/published/0009/03/02/
+  Integer PCG vector hashes for craters, terrain and cloud fields.
+
+Improving Noise
+  Ken Perlin, https://doi.org/10.1145/566654.566636
+  Quintic interpolation and twelve cube-edge gradients for lattice noise.
+
+More Noise
+  Inigo Quilez, https://iquilezles.org/articles/morenoise/
+  Analytic noise gradients and derivative-damped terrain noise.
+
+xoshiro128**
+  David Blackman and Sebastiano Vigna, https://prng.di.unimi.it/xoshiro128starstar.c
+  Seeded pseudorandom number generation.
+
+Turbo color map approximation
+  Anton Mikhailov and Mike Bostock, https://observablehq.com/@mbostock/turbo
+  A polynomial fit to Google’s Turbo palette in Takram’s cloud debug views.
+
+--------------------------------------------------------------------------------
 Astronomical data
 --------------------------------------------------------------------------------
 

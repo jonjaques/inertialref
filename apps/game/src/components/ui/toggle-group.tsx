@@ -1,5 +1,6 @@
 'use client'
 
+// Adapted from the shadcn/ui registry: https://ui.shadcn.com/docs/components/toggle-group
 import * as React from 'react'
 import { type VariantProps } from 'class-variance-authority'
 import { ToggleGroup as ToggleGroupPrimitive } from 'radix-ui'

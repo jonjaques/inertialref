@@ -60,6 +60,8 @@ export interface CloudRenderReport {
   readonly leversHash: string | null
   readonly served: string | null
   readonly second: string | null
+  /** The weather lever applied to the served body. Null for idle frames or the port's own weather. */
+  readonly appliedWeather: string | null
   readonly regime: 'converging' | 'immediate' | 'off'
   readonly reset: string
   readonly extents: {
@@ -154,6 +156,7 @@ export function cloudReportIdle(
     leversHash: null,
     served: null,
     second: null,
+    appliedWeather: null,
     regime: 'off',
     reset: 'none',
     extents: { render: [0, 0], css: [0, 0], trace: [0, 0], history: [0, 0] },

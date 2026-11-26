@@ -10,13 +10,14 @@ import {
   type CloudLevers,
   type CloudWeather,
 } from '../render/cloudLevers.ts'
+import type { CloudChainFactory } from '../render/cloudSystem.ts'
 
 /*
  * A picture's weather as the clouds' levers, and its release.
  *
  * Kept out of `GameEngine.ts`, which sits near the complexity cap, behind a
  * one-line delegate there. A picture writes three levers — whether the
- * volume draws, the regime it draws, and the body it is forced onto — and
+ * volume draws, the requested weather, and the body it is forced onto — and
  * nothing else a script may have set, so a capture that turned `stats` on
  * keeps it through a preset.
  *
@@ -33,7 +34,7 @@ type Held = Pick<CloudLevers, 'on' | 'weather' | 'served'>
 /** What the engine lends this: its levers, whether it has clouds, and its records. */
 export interface PictureWeatherEngine {
   clouds: CloudLevers
-  readonly cloudsAvailable: boolean
+  readonly cloudSystemFactory: Pick<CloudChainFactory, 'appliesWeather'> | null
   readonly sensorDiagnostics: {
     readonly clouds: CloudRenderReport | null
   } | null
@@ -59,23 +60,24 @@ const weatherOf = (regime: string): CloudWeather | null =>
  * The levers a picture's weather asks for over `found`, and what became of
  * it. Pure, so the mapping is held in Node without an engine.
  *
- * - Weather the page can draw: the volume on, the regime as its weather,
+ * - A known regime on a clouds page: the volume on, the regime as its weather,
  *   and the picture's body forced when it is outside the served set
- *   (`cloudsServed`), which is how Earth, with its authored deck, is drawn
- *   at all. Inside the set no force is needed, and none is written.
- * - Weather it cannot — no clouds on the page, no WebGPU, an unknown
- *   regime: the volume off and nothing forced. A picture never draws a
- *   weather other than the one it names.
+ *   (`cloudsServed`), which is how the volume draws at all over Earth, with
+ *   its authored deck. Inside the set no force is needed, and none is written.
+ *   The native march applies the request. The port draws its own weather.
+ * - No clouds on the page, no WebGPU, or an unknown regime: the volume off
+ *   and nothing forced.
  * - No weather at all: the page's default. Where the player's setting draws
  *   the clouds unasked (`byDefault`), the volume stays on over the served
- *   set, the body's climate; elsewhere, a page built by `?clouds=` for a
- *   script, it is off.
+ *   set, using the port's own weather. Elsewhere, on a page built by `?clouds=`
+ *   for a script, it is off.
  */
 export function pictureWeatherLevers(
   found: CloudLevers,
   weather: PictureWeather | null,
   page: {
     readonly available: boolean
+    readonly appliesWeather: boolean
     readonly served: boolean
     readonly address: string
     readonly byDefault?: boolean
@@ -87,41 +89,46 @@ export function pictureWeatherLevers(
       levers: page.byDefault === true ? { ...off, on: true } : off,
       outcome: 'none',
     }
-  const drawn = weatherOf(weather.regime)
-  if (!page.available || drawn === null)
+  const requested = weatherOf(weather.regime)
+  if (!page.available || requested === null)
     return { levers: off, outcome: 'unavailable' }
   return {
     levers: {
       ...found,
       on: true,
-      weather: drawn,
+      weather: requested,
       served: page.served ? null : page.address,
     },
-    outcome: 'drawn',
+    outcome: page.appliesWeather ? 'drawn' : 'renderer-default',
   }
 }
 
 /**
- * What a frame served for a picture's levers, once one has drawn them: the
- * levers ask for a body, and only the clouds' report says which they got. A
- * forced address no body in the scene has serves nothing, and an unforced
- * one serves the body whose air the eye is in, which need not be the
- * picture's. `'drawn'` when the frame served `address`, `'unavailable'`
- * when it served another or none, and null while no frame on the report was
- * drawn with these levers.
+ * What a frame served for a picture's levers, once one has drawn them. The
+ * levers ask for a body and a weather regime, and only the clouds' report
+ * says which they got. A forced address no body in the scene has serves
+ * nothing, and an unforced one serves the body whose air the eye is in,
+ * which need not be the picture's. A frame serving `address` reports
+ * `'drawn'` if it applies the request, or `'renderer-default'` if it uses
+ * its own weather. A frame serving another body or none is `'unavailable'`,
+ * as is a renderer that cannot draw the clouds. Null while no frame on the
+ * report reads these levers.
  */
 export function servedOutcome(
   report: CloudRenderReport | null,
   levers: CloudLevers,
   address: string,
 ): PictureWeatherOutcome | null {
+  if (report?.available === false) return 'unavailable'
   if (report?.levers.on !== true) return null
   if (
     report.levers.served !== levers.served ||
     report.levers.weather !== levers.weather
   )
     return null
-  return report.served === address ? 'drawn' : 'unavailable'
+  if (!report.on || report.served !== address) return 'unavailable'
+  if (report.appliedWeather === null) return 'renderer-default'
+  return report.appliedWeather === levers.weather ? 'drawn' : 'unavailable'
 }
 
 /** The engine's hold on the levers a picture set. */
@@ -206,10 +213,12 @@ export class PictureWeatherHold {
       served: levers.served,
     }
     const body = engine.bodyFor(address)
+    const renderer = engine.cloudSystemFactory
     const next = pictureWeatherLevers(levers, weather, {
       available:
-        engine.cloudsAvailable &&
+        renderer !== null &&
         (engine.sensorDiagnostics?.clouds?.available ?? true),
+      appliesWeather: renderer?.appliesWeather === true,
       served: body !== null && cloudsServed(body),
       address,
       byDefault: this.#byDefault,
@@ -218,12 +227,10 @@ export class PictureWeatherHold {
     this.#taken = { weather, address }
     this.#outcome = next.outcome
     this.#subject = undefined
-    this.#pending = next.outcome === 'drawn' && body === null ? address : null
-    this.#address = next.outcome === 'drawn' ? address : null
+    this.#address = weather !== null && next.levers.on ? address : null
+    this.#pending = body === null ? this.#address : null
     this.#early =
-      weather !== null &&
-      next.outcome === 'unavailable' &&
-      !engine.cloudsAvailable
+      weather !== null && next.outcome === 'unavailable' && renderer === null
         ? { weather, address }
         : null
     return next.outcome
@@ -246,12 +253,13 @@ export class PictureWeatherHold {
    * A frame's check. The pictures are left when the observatory holds no
    * target, or holds another than the picture's; weather asked for before
    * the clouds arrived is applied again on the first frame they have, once;
-   * the outcome follows what the last frame drawn with the picture's levers
-   * served; and a body whose system was not loaded is decided once it is.
+   * the outcome follows the body and weather of the last frame drawn with
+   * the picture's levers; and a body whose system was not loaded is decided
+   * once it is.
    */
   frame(engine: PictureWeatherEngine, observing: boolean): void {
     if (!observing) return this.release(engine)
-    if (this.#early !== null && engine.cloudsAvailable) {
+    if (this.#early !== null && engine.cloudSystemFactory !== null) {
       this.apply(engine, this.#early.weather, this.#early.address)
       return
     }

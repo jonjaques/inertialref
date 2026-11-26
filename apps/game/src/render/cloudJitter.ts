@@ -41,6 +41,7 @@ import type { CloudUniforms } from './cloudUniforms.ts'
  * loses the fraction's low bits once the product passes 2²³: a 0.06 step
  * after 1.6 million frames, seven hours at 60 Hz, and every texel's jitter
  * on a sixteenth of the pixel.
+ * R1 and R2 follow Martin Roberts: https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
  */
 const R1_FRACTION = 2654435769
 const PLASTIC_FRACTION = 3242174889
@@ -61,6 +62,7 @@ const step = (frame: Node<'uint'>, fraction: number): Node<'float'> =>
  *
  * `.x` places the first step along the ray. A texel's sampling point is
  * `.y`'s pair less ½: `traceScreen` takes an offset from the texel's center.
+ * Source: https://www.iryoku.com/next-generation-post-processing-in-call-of-duty-advanced-warfare/
  */
 export function traceJitter(
   pixel: Node<'uvec2'>,

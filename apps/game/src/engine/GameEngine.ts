@@ -543,7 +543,10 @@ export class GameEngine {
         : Object.assign(
             (deps: Parameters<CloudChainFactory>[0]) =>
               factory({ ...deps, front }),
-            { createFront: factory.createFront },
+            {
+              createFront: factory.createFront,
+              appliesWeather: factory.appliesWeather,
+            },
           )
   }
 
@@ -555,6 +558,9 @@ export class GameEngine {
    * and name the body they are served on.
    */
   cloudTunables: CloudsHandle | null = null
+
+  /** Whether the canvas being built needs the native march's sky table. */
+  cloudSkyTable = false
 
   /**
    * What a material drawn after the composite reads the clouds in front of

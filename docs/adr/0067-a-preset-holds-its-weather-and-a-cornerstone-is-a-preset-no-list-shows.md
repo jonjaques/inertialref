@@ -7,7 +7,9 @@ starts from a settled first frame, G2 faces a sea deeper than the drawn
 ground's tail, and the sun is solved over a place that moves; amended
 17 Nov 2026: the clouds are a player's setting, a picture without weather
 keeps the setting's clouds, and the planetarium lists the cornerstones and
-two air checks on Mars while the setting is on. Amends
+two air checks on Mars while the setting is on. Amended 19 Nov 2026 to
+report the weather that each renderer applies and show the section when
+the page can draw volumetric clouds. Amends
 [ADR-0033](0033-presets-hold-a-photographic-instant.md): version 3 of the
 presets format, and a second bundled list. The volume the weather draws is
 [ADR-0063](0063-the-weather-draws-between-a-scene-pass-under-the-clouds-and-one-over-them.md)'s
@@ -55,7 +57,7 @@ gate, all of which read the bundled list.
 **A picture holds its weather in an optional field, version 3 of the format,
 and the pictures the weather is judged on are presets in a second bundled list
 that `findPicture` searches and only the planetarium's clouds section shows,
-while the player's clouds setting is on.**
+when the page can draw volumetric clouds.**
 
 ### The format
 
@@ -78,19 +80,23 @@ while the player's clouds setting is on.**
 ### Taking a picture
 
 - `takePicture` hands the weather, or none, to the render host's
-  `setWeather` after the instant is set, and its result says what became of
-  it: `drawn`, `unavailable` (no `?clouds=1`, a WebGL renderer, or an unknown
-  regime) or `none`. Headlessly every weather is unavailable.
+  `setWeather` after the instant is set. The host returns `drawn` for a
+  known request on the native march and `renderer-default` on the port,
+  which uses its own weather map. A page without volumetric clouds, a
+  WebGL renderer, or an unknown regime returns `unavailable`. A picture
+  without a weather request returns `none`. The frame report carries the
+  body served and the applied weather, which the engine uses to confirm
+  the result. Headlessly every weather request is unavailable.
 - The engine writes three levers and no others: `on`, the regime as the
   scenario, and `served`, the picture's body by address when the body is
   outside the default set (`cloudsServed`: wet, and no authored deck). A
   station's picture names the body the station goes round, since the clouds
   are served on a body and a station's address names none. Weather the
-  page cannot draw turns the volume off: a picture never draws a weather
-  other than the one it names.
+  build does not recognize turns the volume off. For a recognized request,
+  the port still draws its own weather over the picture's body.
 - **No weather is the page's default.** Under the player's `render.clouds`
-  the volume stays on over the default set, the body's climate, so a
-  person who turned the clouds on keeps them through Earthrise. On a page a
+  the port uses its own weather map over the default set, so a person who
+  turns the clouds on keeps that setting through Earthrise. On a page a
   `?clouds=` link built, which is a script's, the setting is not bound and
   an ordinary preset turns the volume off. A change of the setting while a
   picture is held takes the picture again under it, so leaving the picture
@@ -110,12 +116,15 @@ while the player's clouds setting is on.**
   searches `PICTURES`, then `CORNERSTONES`, then `AIR_CHECKS`; the id sets
   are disjoint. So `ir.preset(id)`, `?preset=` and `drive.mjs --preset` take
   a cornerstone.
-- **The planetarium's clouds section lists them while the setting is on,**
-  grouped by world, a labeled button each with its line as the tooltip and
-  no plate: a cornerstone's plates are the capture's, taken per phase. Off,
-  the section is not drawn, because a cornerstone without the clouds is a
-  picture of nothing in particular. "Export all", the tour and
-  `presets:check` still read `PICTURES` alone.
+- **The planetarium's clouds section lists them when the page can draw
+  volumetric clouds.** Both the setting and a `?clouds=` link can build a
+  cloud renderer. The section reads the engine snapshot, which checks for
+  a loaded renderer and a WebGPU sensor. The pictures are grouped by world,
+  a labeled button each with its line as the tooltip and no plate. The
+  cornerstones' plates are the capture's, taken per phase. On a page without
+  volumetric clouds the section is hidden, because a cornerstone without
+  the clouds is a picture of nothing in particular. "Export all", the tour
+  and `presets:check` still read `PICTURES` alone.
 - **Two air checks on Mars stand beside them,** in `airChecks.json`: Elysium
   Planitia two meters up with the sun 2° and setting on an open horizon, and the limb
   from 400 km over Valles Marineris with the sun 12° over the sub-point,

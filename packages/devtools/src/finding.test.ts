@@ -1,8 +1,14 @@
+import fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import { LIGHT_YEAR } from '@inertialref/shared'
+import { LIGHT_YEAR, SECONDS_PER_DAY } from '@inertialref/shared'
 import { UV } from '@inertialref/spatial'
 import { World } from '@inertialref/simulation'
-import { systemId, TEST_CATALOG } from '@inertialref/universe'
+import {
+  bodyFrameId,
+  parseAddress,
+  systemId,
+  TEST_CATALOG,
+} from '@inertialref/universe'
 import type { WorkerPool } from '@inertialref/workers'
 import {
   boundedTravelRadius,
@@ -32,7 +38,10 @@ function vantage(observer: 'sirius' | null = null): Vantage {
     observer:
       observer === null
         ? null
-        : session.world.loadSystem(systemId(SIRIUS)).position,
+        : {
+            position: session.world.loadSystem(systemId(SIRIUS)).position,
+            time: session.world.clock.renderTime,
+          },
   }
 }
 
@@ -59,6 +68,60 @@ describe('where a search is asked from', () => {
     expect(nearbyTargets(here, { lightYears: 1, origin: 'observer' })).toEqual(
       nearbyTargets(here, { lightYears: 1 }),
     )
+  })
+})
+
+describe('when a listing measures from the eye', () => {
+  const earth = 'g:milky-way/s:SOL/b:2'
+  const earthFrame = bodyFrameId(parseAddress(earth))
+  const options = { origin: 'observer', lightYears: 0 } as const
+
+  function lookingAtEarth() {
+    const { world, harness } = openSession({
+      seed: 'inertialref',
+      catalog: TEST_CATALOG,
+      workers: null,
+    })
+    harness.look(earth)
+    const assertDistances = (time: number): void => {
+      const eye = harness.observerSample(0)!.position
+      const center = world.frames.pose(earthFrame, time).position
+      const expected = UV.distance(center, eye)
+      expect({
+        survey: harness.targets(options).find((row) => row.address === earth)
+          ?.distance,
+        fuzzy: harness.rowsFor([earth], options)[0]?.distance,
+      }).toEqual({ survey: expected, fuzzy: expected })
+      const sol = world.system(systemId('SOL'))!.position
+      expect(harness.search('Sol', options)[0]?.distance).toBe(
+        UV.distance(sol, eye),
+      )
+    }
+    return { world, harness, assertDistances }
+  }
+
+  it('measures at each held instant without changing the world hash', () => {
+    const { world, harness, assertDistances } = lookingAtEarth()
+    const before = world.stateHash()
+    const century = 36_525 * SECONDS_PER_DAY
+    fc.assert(
+      fc.property(fc.integer({ min: -century, max: century }), (time) => {
+        harness.observatory.setTime(time)
+        expect(world.stateHash()).toBe(before)
+        assertDistances(time)
+        expect(world.stateHash()).toBe(before)
+      }),
+      { examples: [[100 * SECONDS_PER_DAY], [0]] },
+    )
+  })
+
+  it('returns to interpolated live time when the photograph is released', () => {
+    const { world, harness, assertDistances } = lookingAtEarth()
+    harness.observatory.setTime(100 * SECONDS_PER_DAY)
+    world.advance(1 / 60)
+    harness.observatory.setTime(null)
+    expect(world.clock.renderTime).toBeLessThan(world.clock.time)
+    assertDistances(world.clock.renderTime)
   })
 })
 

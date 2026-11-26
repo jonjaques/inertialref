@@ -96,11 +96,9 @@ terrain, water, clouds, orbit traces and the object dossier all use that present
 Canonical entities retain their simulation history. Returning to live time or
 leaving the planetarium releases the photographic clock.
 
-The Navigator has a known gap in that contract. Its observer-centered survey
-and fuzzy-search rows measure body distances at `world.clock.time` while the
-eye can belong to the held photograph. After a date change, those distances
-can disagree with the picture. The rendering invariant still requires one
-presentation instant; this is a consumer defect, not an exception to it.
+The Navigator's observer-centered survey and fuzzy-search rows sample bodies
+and stations at the eye's presentation instant. Ship-centered queries measure
+from the player's canonical position at the simulation tick.
 
 Camera adaptation has its own presentation clock. `engine.presentationTime`
 accumulates bounded frame deltas, so Automatic can settle on a held photograph

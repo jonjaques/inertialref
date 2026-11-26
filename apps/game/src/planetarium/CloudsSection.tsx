@@ -1,7 +1,7 @@
 import { AIR_CHECKS, CORNERSTONES, type Picture } from '@inertialref/devtools'
 import { Action } from '../hud/Action.tsx'
 import { Section } from '../hud/Section.tsx'
-import { RENDER_CLOUDS, usePersistentState } from '../state/preferences.ts'
+import { useEngine } from '../state/engineStore.ts'
 import type { PlanetariumContext } from './context.ts'
 
 /** The world a picture stands on, for its group: a station's is its body's. */
@@ -22,16 +22,19 @@ const GROUPS = (['Earth', 'A generated world', 'Mars'] as const).map(
 )
 
 /**
- * The pictures the clouds are judged on, a tap each, while the clouds are on:
- * the weather's cornerstones (ADR-0067), each with the regime it holds, and
- * the air checks on Mars, which hold none. Shown only with the setting on,
- * because a cornerstone is a picture of weather and without the clouds it is
- * a picture of nothing in particular. Labels and no plates: the cornerstones'
- * plates are the capture's, taken per phase, and none is committed.
+ * The pictures the clouds are judged on, a tap each, on a page that can draw
+ * the clouds. The weather's cornerstones (ADR-0067) each hold a regime, and
+ * the air checks on Mars hold none. The section stays available between
+ * pictures, but is hidden on pages without volumetric clouds because a
+ * cornerstone without them is a picture of nothing in particular. Labels and
+ * no plates, because the cornerstones' plates are the capture's, taken per
+ * phase, and none is committed.
  */
-export function CloudsSection(context: PlanetariumContext) {
-  const [clouds] = usePersistentState(RENDER_CLOUDS)
-  if (!clouds) return null
+export function CloudsSection({
+  takePicture,
+}: Pick<PlanetariumContext, 'takePicture'>) {
+  const cloudsAvailable = useEngine((snapshot) => snapshot.cloudsAvailable)
+  if (!cloudsAvailable) return null
   return (
     <Section
       id="planetarium.presets.clouds"
@@ -48,7 +51,7 @@ export function CloudsSection(context: PlanetariumContext) {
                   key={picture.id}
                   label={picture.label}
                   title={picture.why}
-                  onClick={() => context.takePicture(picture, true)}
+                  onClick={() => takePicture(picture, true)}
                 />
               ))}
             </div>

@@ -79,6 +79,7 @@ import { warmByDrawing } from './warmup.ts'
  * cell's center toward the sun, summed through the local volume in 32 steps
  * whose heights come from `altitudeAt` (rule 52), over the window of the
  * volume's 200 m level and 32 heights from the union's base to its top.
+ * Source: https://advances.realtimerendering.com/s2023/Nubis%20Cubed%20(Advances%202023).pdf
  *
  * **Its depth is the drawn medium's.** A cell sums the extinction the
  * volume's medium answers with, which is the one the march's transmittance

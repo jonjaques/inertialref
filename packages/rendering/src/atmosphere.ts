@@ -1,5 +1,6 @@
 /*
  * Precomputed atmospheric scattering, in the Bruneton/Hillaire family.
+ * Sources: https://doi.org/10.1111/j.1467-8659.2008.01245.x and https://doi.org/10.1111/cgf.14050
  *
  * The analytic shell in the client was a placeholder with a named successor —
  * "Bruneton's precomputed transmittance and multiple-scattering LUTs", spike 2

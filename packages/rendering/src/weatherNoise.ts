@@ -256,6 +256,7 @@ export function curlNoise(u: number, v: number): readonly [number, number] {
  * three-octave Perlin billow (four lattice cells a period, two base cells a
  * cell) dilated by a three-octave Worley FBM (8, 16 and 32 cells a period,
  * weighted 0.625, 0.25 and 0.125), then spread over [0, 1] (`BASE_NOISE_SPREAD`).
+ * Source: https://github.com/sebh/TileableVolumeNoise
  */
 export function baseNoiseWide(
   cells: Vec3,

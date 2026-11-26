@@ -425,6 +425,7 @@ export function gameVite(
     build: {
       target: 'es2023',
       sourcemap: true,
+      license: { fileName: 'bundled-licenses.json' },
     },
   }
 }
