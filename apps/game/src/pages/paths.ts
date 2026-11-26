@@ -361,15 +361,9 @@ export const QUERY = {
    */
   output: 'output',
   /**
-   * Every mode: `1` builds the cloud system for the page's lifetime — its
-   * chunk, its warmed pipelines, the overlays' layer marks — and draws
-   * nothing until a script sets `engine.clouds` whole with `on: true`. A
-   * diagnostic like `producer`, and the only way in: without it not one
-   * cloud object exists, so no plate, comparison or ledger run can move.
-   * `takram` builds takram's clouds in the same place through their WebGPU
-   * port (`render/clouds.ts`), under the same levers; a page holds one
-   * renderer or the other. `takram:low` builds the port at that quality
-   * preset, one of `low`, `medium`, `high`, `ultra` and `lowEnd`.
+   * Every mode: `1` builds the port, `march` the diagnostic native renderer,
+   * and `0` disables both. A quality preset such as `low` builds the port
+   * at that preset. Without a selector the canvas follows display settings.
    */
   clouds: 'clouds',
 } as const

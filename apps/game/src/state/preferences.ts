@@ -5,6 +5,11 @@ import {
   type SoundtrackCategory,
 } from '@inertialref/protocol'
 import { useEffect, useRef, useState } from 'react'
+import {
+  CLOUD_QUALITIES,
+  DEFAULT_CLOUD_QUALITY,
+  type CloudQuality,
+} from '../render/cloudQuality.ts'
 import { useHydrated } from './hydration.ts'
 import {
   type Lens,
@@ -298,7 +303,7 @@ export const RENDER_LENS_FLARE = define({
  * Volumetric clouds: takram's renderer through its WebGPU port
  * (`render/clouds.ts`), drawn on the bodies the clouds serve unasked.
  *
- * Off by default. The cloud chunk is chosen when the renderer is built, so
+ * The cloud chunk is chosen when the renderer is built, so
  * the canvas is built again when this changes, as it is for the output range.
  * A page link's `?clouds=` outranks it for that page and writes nothing back.
  * On a WebGL renderer the system is not built and the switch draws nothing.
@@ -307,8 +312,16 @@ export const RENDER_CLOUDS = define({
   key: 'render.clouds',
   group: 'display',
   what: 'volumetric clouds',
-  initial: false,
+  initial: true,
   accept: isBoolean,
+})
+
+export const RENDER_CLOUD_QUALITY = define<CloudQuality>({
+  key: 'render.cloudQuality',
+  group: 'display',
+  what: 'volumetric cloud quality',
+  initial: DEFAULT_CLOUD_QUALITY,
+  accept: oneOf(CLOUD_QUALITIES),
 })
 
 /**
@@ -878,6 +891,7 @@ export const REGISTRY: readonly AnyPreference[] = [
   RENDER_PICTURE,
   RENDER_LENS_FLARE,
   RENDER_CLOUDS,
+  RENDER_CLOUD_QUALITY,
   RENDER_GAMMA,
   RENDER_SURFACE,
   RENDER_SHIP,

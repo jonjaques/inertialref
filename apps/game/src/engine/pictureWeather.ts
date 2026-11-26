@@ -90,7 +90,13 @@ export function pictureWeatherLevers(
       outcome: 'none',
     }
   const requested = weatherOf(weather.regime)
-  if (!page.available || requested === null)
+  // A saved picture can name an authored deck outside the wet-world set.
+  // Only an explicit renderer link may force the stock volume over that deck.
+  if (
+    !page.available ||
+    requested === null ||
+    (page.byDefault === true && !page.served && !page.appliesWeather)
+  )
     return { levers: off, outcome: 'unavailable' }
   return {
     levers: {

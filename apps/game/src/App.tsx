@@ -28,6 +28,7 @@ import { bindEngineKnobs } from './state/engineKnobs.ts'
 import {
   DEBUG_ON,
   RENDER_CLOUDS,
+  RENDER_CLOUD_QUALITY,
   RENDER_PICTURE,
   RENDER_HDR,
   RENDER_SENSOR,
@@ -119,7 +120,7 @@ let singleton: GameEngine | null = null
 const CLOUD_LOADERS: CloudsLoaders = {
   native: () =>
     import('./render/cloudSystem.ts').then((chunk) => chunk.createCloudSystem),
-  takram: (preset) =>
+  port: (preset) =>
     import('./render/clouds.ts').then((chunk) =>
       chunk.loadClouds(cloudsServed, preset),
     ),
@@ -287,10 +288,23 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     ),
   )
   const [storedClouds] = usePersistentState(RENDER_CLOUDS)
-  const clouds = cloudsRequested ?? (storedClouds ? SETTING_CLOUDS : null)
+  const clouds =
+    cloudsRequested === undefined
+      ? storedClouds
+        ? SETTING_CLOUDS
+        : null
+      : cloudsRequested
+  const [cloudQuality] = usePersistentState(RENDER_CLOUD_QUALITY)
   // One counter of canvas builds for the page, so a build superseded while
   // its load was in flight does not publish its clouds over the next one.
-  const [cloudsCanvas] = useState(() => canvasClouds(engine, CLOUD_LOADERS))
+  const [cloudsCanvas] = useState(() => {
+    const canvas = canvasClouds(engine, CLOUD_LOADERS)
+    canvas.setQuality(cloudQuality)
+    return canvas
+  })
+  useEffect(() => {
+    if (cloudsRequested === undefined) cloudsCanvas.setQuality(cloudQuality)
+  }, [cloudsCanvas, cloudsRequested, cloudQuality])
   const picture = pictureOverride ?? storedPicture
   const pictureDiagnostic =
     pictureOverride !== null && pictureQuery?.startsWith('bilinear:')
@@ -417,7 +431,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
    * child-first: binding here in that phase overwrote the restored lens and
    * camera mode with the stored preferences immediately after the URL applied.
    */
-  const cloudsLinked = cloudsRequested !== null
+  const cloudsLinked = cloudsRequested !== undefined
   useLayoutEffect(
     () => bindEngineKnobs(engine, pictureOverride, cloudsLinked),
     [engine, pictureOverride, cloudsLinked],
@@ -623,6 +637,10 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     displaySize,
     pictureOverride,
     cloudsLinked,
+    cloudsEnabled: clouds !== null,
+    ...(cloudsRequested?.kind === 'port'
+      ? { cloudQualityOverride: cloudsRequested.preset }
+      : {}),
     onPreference: (next: OutputPreference) => {
       if (next === hdr) return
       // The renderer is rebuilt for this, so say what happened — otherwise the

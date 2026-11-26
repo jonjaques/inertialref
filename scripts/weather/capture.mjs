@@ -321,7 +321,7 @@ export const rigArgs = (options) => [
 ]
 
 const plateQueries = (clouds) =>
-  [...RIG.queries, ...(clouds ? ['clouds=1'] : [])].flatMap((q) => [
+  [...RIG.queries, clouds ? 'clouds=1' : 'clouds=0'].flatMap((q) => [
     '--query',
     q,
   ])

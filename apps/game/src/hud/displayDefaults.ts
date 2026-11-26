@@ -1,5 +1,6 @@
 import {
   RENDER_CLOUDS,
+  RENDER_CLOUD_QUALITY,
   RENDER_GAMMA,
   RENDER_HDR,
   RENDER_LENS_FLARE,
@@ -41,6 +42,7 @@ export interface DisplayDefaults {
     readonly sharpness: boolean
     readonly flare: boolean
     readonly clouds: boolean
+    readonly cloudQuality: boolean
     readonly terrain: boolean
     readonly ground: boolean
     readonly sea: boolean
@@ -60,6 +62,7 @@ const WHOLE = [
   RENDER_GAMMA,
   RENDER_LENS_FLARE,
   RENDER_CLOUDS,
+  RENDER_CLOUD_QUALITY,
   RENDER_SURFACE,
   RENDER_SHIP,
   RENDER_THRUSTER_VARIATION,
@@ -71,6 +74,7 @@ export function useDisplayDefaults(): DisplayDefaults {
   const [gamma] = usePersistentState(RENDER_GAMMA)
   const [flare] = usePersistentState(RENDER_LENS_FLARE)
   const [clouds] = usePersistentState(RENDER_CLOUDS)
+  const [cloudQuality] = usePersistentState(RENDER_CLOUD_QUALITY)
   const [surface] = usePersistentState(RENDER_SURFACE)
   const [ship] = usePersistentState(RENDER_SHIP)
   const [thrusters] = usePersistentState(RENDER_THRUSTER_VARIATION)
@@ -87,6 +91,7 @@ export function useDisplayDefaults(): DisplayDefaults {
     sharpness: picture.sharpness !== RENDER_PICTURE.initial.sharpness,
     flare: flare !== RENDER_LENS_FLARE.initial,
     clouds: clouds !== RENDER_CLOUDS.initial,
+    cloudQuality: cloudQuality !== RENDER_CLOUD_QUALITY.initial,
     terrain: surface.terrain !== RENDER_SURFACE.initial.terrain,
     ground: surface.ground !== RENDER_SURFACE.initial.ground,
     sea: surface.sea !== RENDER_SURFACE.initial.sea,

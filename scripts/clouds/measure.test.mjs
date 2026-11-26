@@ -327,7 +327,7 @@ describe('the invocations', () => {
     expect(argv).toContain('--no-serve')
     expect(argv).not.toContain('--keep-storage')
     expect(argv.filter((_, i) => argv[i - 1] === '--query')).toEqual([
-      'clouds=1',
+      'clouds=march',
       'chrome=0',
       'layers=0',
       'output=standard',
@@ -367,13 +367,14 @@ describe('the invocations', () => {
     }
     expect(queries(flagged)).toEqual([
       'timing=full',
-      'clouds=1',
+      'clouds=march',
       'chrome=0',
       'layers=0',
       'output=standard',
     ])
     expect(queries(plain)).toEqual([
       'timing=full',
+      'clouds=0',
       'chrome=0',
       'layers=0',
       'output=standard',

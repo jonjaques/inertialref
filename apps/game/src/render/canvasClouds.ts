@@ -3,6 +3,11 @@ import { getLogger } from '@inertialref/shared'
 // caller's `import()`, so the page loads neither through this module.
 import type { CloudChainFactory } from './cloudSystem.ts'
 import type { CloudsHandle } from './cloudsTunables.ts'
+import {
+  CLOUD_QUALITIES,
+  DEFAULT_CLOUD_QUALITY,
+  type CloudQuality,
+} from './cloudQuality.ts'
 import { buildingClouds } from './cloudBuild.ts'
 
 /*
@@ -23,8 +28,8 @@ import { buildingClouds } from './cloudBuild.ts'
 const log = getLogger('game.clouds')
 
 /**
- * The renderer a canvas builds the clouds with: ours at `?clouds=1`,
- * takram's port at `?clouds=takram`, and at `takram:low` the port built at
+ * The renderer a canvas builds the clouds with: the native march at `?clouds=march`,
+ * the port at `?clouds=1`, and at `?clouds=low` the port built at
  * that quality preset from its first frame. `optional` is the player's
  * setting's: a load that fails, or a renderer that is not WebGPU, leaves
  * the page drawing without clouds, where a link's fails the canvas, loudly.
@@ -32,25 +37,29 @@ const log = getLogger('game.clouds')
 export type CloudRenderer =
   | { readonly kind: 'native' }
   | {
-      readonly kind: 'takram'
-      readonly preset: string | null
+      readonly kind: 'port'
+      readonly preset: CloudQuality
       readonly optional?: boolean
     }
 
 /** What `render.clouds` builds: takram's renderer at its own preset. */
 export const SETTING_CLOUDS: CloudRenderer = {
-  kind: 'takram',
-  preset: null,
+  kind: 'port',
+  preset: DEFAULT_CLOUD_QUALITY,
   optional: true,
 }
 
-/** A link's `?clouds=`, or null for none this build knows. */
-export function cloudRendererOf(value: string | null): CloudRenderer | null {
-  if (value === '1') return { kind: 'native' }
-  if (value === 'takram') return { kind: 'takram', preset: null }
-  if (value?.startsWith('takram:') === true)
-    return { kind: 'takram', preset: value.slice('takram:'.length) }
-  return null
+/** A recognized link overrides storage, including an explicit clouds-off page. */
+export function cloudRendererOf(
+  value: string | null,
+): CloudRenderer | null | undefined {
+  if (value === '0') return null
+  if (value === 'march') return { kind: 'native' }
+  const preset =
+    value === '1'
+      ? DEFAULT_CLOUD_QUALITY
+      : CLOUD_QUALITIES.find((quality) => quality === value)
+  return preset === undefined ? undefined : { kind: 'port', preset }
 }
 
 /** Where a canvas publishes the clouds. */
@@ -63,7 +72,7 @@ export interface CloudsTarget {
 /** The two chunks, each behind the caller's `import()`. */
 export interface CloudsLoaders {
   readonly native: () => Promise<CloudChainFactory>
-  readonly takram: (preset: string | null) => Promise<{
+  readonly port: (preset: CloudQuality) => Promise<{
     readonly factory: CloudChainFactory
     readonly handle: CloudsHandle
   }>
@@ -81,6 +90,9 @@ type Factory<P, R> = (props: P) => Promise<R>
 /** A page's canvas factories for the clouds, one counter of builds between them. */
 export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
   let builds = 0
+  let quality: CloudQuality = DEFAULT_CLOUD_QUALITY
+  // The loader retains settings while the player switches clouds off.
+  let preferences: CloudsHandle | null = null
   const publish = (
     factory: CloudChainFactory | null,
     handle: CloudsHandle | null,
@@ -89,6 +101,11 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
     target.cloudTunables = handle
   }
   return {
+    setQuality(next: CloudQuality): void {
+      if (quality === next) return
+      quality = next
+      preferences?.preset(next)
+    },
     /**
      * The renderer factory, resolving the cloud system's chunk beside the
      * renderer. R3F awaits it before it mounts a child, so the sensor's first
@@ -113,33 +130,41 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
           if (newest()) publish(system, null)
           return renderer
         }
-        if (clouds.optional !== true) {
-          // The port's four baked textures load beside the renderer too.
-          const [renderer, adapter] = await Promise.all([
-            factory(props),
-            loaders.takram(clouds.preset),
-          ])
-          if (newest()) publish(adapter.factory, adapter.handle)
-          return renderer
-        }
-        // The setting's: started beside the renderer where it can draw, and
-        // waited on only once the renderer is WebGPU, where the sensor builds
-        // the system (`sensor.ts`); a WebGL canvas does not wait on 2.7 MB of
-        // textures it cannot use.
+        const optional = clouds.optional === true
+        const atLoad = optional ? quality : clouds.preset
+        // Start both together. Handle a rejection even if the renderer falls
+        // back to WebGL and never awaits the textures.
         const load = loaders.webgpu()
-          ? loaders.takram(clouds.preset).catch((cause: unknown) => {
-              log.warn('the clouds did not load; drawing without them', {
-                cause: String(cause),
-              })
-              return null
-            })
+          ? loaders.port(atLoad).then(
+              (adapter) => ({ adapter }),
+              (cause: unknown) => ({ cause }),
+            )
           : null
         const renderer = await factory(props)
-        const adapter =
+        const result =
           load !== null && 'isWebGPUBackend' in renderer.backend
             ? await load
             : null
-        if (newest()) publish(adapter?.factory ?? null, adapter?.handle ?? null)
+        if (result !== null && 'cause' in result) {
+          if (!optional) throw result.cause
+          log.warn('the clouds did not load; drawing without them', {
+            cause: String(result.cause),
+          })
+        }
+        if (newest()) {
+          const adapter =
+            result !== null && 'adapter' in result ? result.adapter : null
+          if (optional && adapter !== null) {
+            if (
+              preferences !== adapter.handle &&
+              adapter.handle.state().preset !== quality
+            ) {
+              adapter.handle.preset(quality)
+            }
+            preferences = adapter.handle
+          }
+          publish(adapter?.factory ?? null, adapter?.handle ?? null)
+        }
         return renderer
       }
     },

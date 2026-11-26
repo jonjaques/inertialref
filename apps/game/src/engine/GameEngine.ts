@@ -118,7 +118,7 @@ import type {
   CloudChainFactory,
   CloudFrontHandle,
 } from '../render/cloudSystem.ts'
-// Types only: the takram port is its own chunk, loaded under `?clouds=takram`.
+// Types only: the takram port is its own chunk, loaded under `?clouds=1`.
 import type { CloudsHandle } from '../render/cloudsTunables.ts'
 import { PictureWeatherHold } from './pictureWeather.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
@@ -508,7 +508,7 @@ export class GameEngine {
    * copy, because a field written in place skips that check, and the frame
    * compares its levers against the last frame's, which would be the same
    * object: a weather changed that way keeps the old one's history. Inert
-   * without `?clouds=1`, which builds no system to read them.
+   * on a clouds-off page, which builds no system to read them.
    */
   #clouds: CloudLevers = DEFAULT_CLOUD_LEVERS
 
@@ -525,7 +525,7 @@ export class GameEngine {
   #cloudFront: CloudFrontHandle | null = null
 
   /**
-   * `?clouds=1`'s chunk, or `?clouds=takram`'s, resolved in the canvas's
+   * `?clouds=march`'s chunk, or the port's, resolved in the canvas's
    * renderer factory; null without the flag. What comes back builds a system
    * that writes this engine's front handle, so every chain the sensor builds
    * feeds the one handle the scene's materials hold.
@@ -551,7 +551,7 @@ export class GameEngine {
   }
 
   /**
-   * `?clouds=takram`'s presets and tunables, which a script writes as
+   * `?clouds=1`'s presets and tunables, which a script writes as
    * `engine.cloudTunables.preset('ultra')` and
    * `engine.cloudTunables.set({ coverage: 0.4 })`; null on every other page.
    * The levers above still switch the clouds on

@@ -116,6 +116,23 @@ describe('a picture’s weather as levers', () => {
     address: EARTH,
   }
 
+  it('keeps an authored deck when the default port cannot serve the requested weather', () => {
+    const result = pictureWeatherLevers(
+      DEFAULT_CLOUD_LEVERS,
+      { regime: 'overcast' },
+      {
+        available: true,
+        appliesWeather: false,
+        served: false,
+        address: EARTH,
+        byDefault: true,
+      },
+    )
+    expect(result.levers.on).toBe(false)
+    expect(result.levers.served).toBeNull()
+    expect(result.outcome).toBe('unavailable')
+  })
+
   it('draws a known regime, and forces a body outside the served set by its address', () => {
     const { levers, outcome } = pictureWeatherLevers(
       DEFAULT_CLOUD_LEVERS,

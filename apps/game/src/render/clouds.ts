@@ -80,7 +80,7 @@ import {
 import { warmCompile, warmRenderer } from './warmup.ts'
 
 /*
- * `?clouds=takram`: takram's volumetric clouds, through the unofficial
+ * `?clouds=1`: takram's volumetric clouds, through the unofficial
  * WebGPU port `three-clouds-webgpu` as it ships, in the place the native
  * cloud system stands.
  *
@@ -447,6 +447,7 @@ function build(
     overPass,
     beginFrame(inputs, sensor) {
       if (disposed) return
+      settings.flush(context)
       // The levers the page holds, drawn with or not: what the report says.
       levers = inputs === null ? null : { ...inputs.levers }
       const body =
@@ -550,11 +551,7 @@ function build(
         layered = false
       }
     },
-    afterFrame() {
-      // After a frame this system's pass drew, and only then, and into its
-      // own context: `cloudsTunables.ts`.
-      if (drawing) settings.flush(context)
-    },
+    afterFrame() {},
     // The port holds no radiance at a trace's texels to read back.
     captureRadiance: () => Promise.resolve(null),
     resetHistory() {

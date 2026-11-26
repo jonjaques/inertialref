@@ -304,7 +304,7 @@ describe('the capture’s plan', () => {
     const volume = stillArgs('weather-e1-cumulus-orbit', 'volume', 'a.png')
     const deck = stillArgs('weather-e1-cumulus-orbit', 'deck', 'b.png')
     expect(volume).toContain('clouds=1')
-    expect(deck).not.toContain('clouds=1')
+    expect(deck).toContain('clouds=0')
     for (const args of [volume, deck]) {
       for (const query of ['chrome=0', 'layers=0', 'output=standard'])
         expect(args).toContain(query)

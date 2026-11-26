@@ -92,7 +92,7 @@ export interface SensorDiagnostics {
 }
 
 export interface SensorOptions {
-  /** `?clouds=1`'s chunk, or `?clouds=takram`'s: the chain builds the cloud system on WebGPU. */
+  /** `?clouds=march`'s chunk, or the port's: the chain builds the cloud system on WebGPU. */
   readonly clouds?: CloudChainFactory
 }
 

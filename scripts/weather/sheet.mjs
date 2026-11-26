@@ -46,7 +46,7 @@ const run = promisify(execFile)
  */
 export const ROLES = Object.freeze({
   candidate: [],
-  deck: ['no ?clouds=1: the textured deck, not the volume'],
+  deck: ['the textured deck with the volume disabled'],
   'last-accepted': [],
   'low-anchor': ['phase 0’s light on the placeholder density'],
   'guard-pair': [],

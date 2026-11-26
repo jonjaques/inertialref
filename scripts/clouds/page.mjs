@@ -116,7 +116,7 @@ export async function cloudStep(step) {
     stance() {
       if (typeof ir.clouds !== 'function' || engine.cloudsAvailable !== true)
         throw new Error(
-          'this page has no cloud system: the URL needs clouds=1, and the build ir.clouds()',
+          'this page has no cloud system: the URL needs clouds=march, and the build ir.clouds()',
         )
       set(step.levers)
       const at = step.stance

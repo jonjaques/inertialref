@@ -27,16 +27,9 @@ import type { CloudLevers } from './cloudLevers.ts'
  * the overrides after it, the port's own order; applying a preset drops the
  * overrides of the fields it names, as re-applying one does on the context.
  *
- * **A write lands after a frame the port has drawn, never before one.** On
- * three 0.185 the port's graph without `accurateSunSkyLight`, which `low`,
- * `medium` and `lowEnd` all are, does not compile on a first frame: TSL
- * reports `Member "bottomRadius" not found in struct "AtmosphereParameters"`
- * and the march's pipeline is refused, at boot and on the first frame after
- * the clouds were off alike. Rebuilt on the frame after one the port drew,
- * the same graph compiles. So a context is always built at the port's own
- * `high`, and `flush`, which a system calls with its own context after such
- * a frame, is the only writer. What a context is owed is kept for that
- * context: one that has drawn nothing is not written because another drew.
+ * r187 builds all five presets from their first frame. Each context takes the
+ * page's settings on attachment, before warm-up, and flushes later writes at
+ * the start of its own frame.
  *
  * **A write is what changed, and no more.** The port's setters clear its
  * history and rebuild its graph on a change of value, so writing the preset
@@ -68,14 +61,6 @@ export interface CloudsTunable {
   readonly note?: string
 }
 
-export const CLOUDS_PRESETS = [
-  'low',
-  'medium',
-  'high',
-  'ultra',
-  'lowEnd',
-] as const satisfies readonly QualityPreset[]
-
 const row = (
   path: string,
   kind: CloudsTunableKind,
@@ -96,7 +81,7 @@ const CONTEXT: readonly CloudsTunable[] = [
   {
     path: 'qualityPreset',
     kind: 'enum',
-    values: CLOUDS_PRESETS,
+    values: Object.keys(qualityPresets),
     what: 'Writes every field a preset names: the march, the shadow maps and five feature switches',
     rebuilds: true,
     lever: null,
@@ -701,7 +686,7 @@ export interface CloudsHandle {
   /** The port's named skies: its cloud layers and coverage in one write. */
   readonly cloudTypes: readonly string[]
   cloudType(name: CloudTypePresetName): void
-  /** Write tunables by path; each lands after the next frame the clouds draw. */
+  /** Write tunables by path; each lands before the next frame. */
   set(patch: Readonly<Record<string, unknown>>): void
   /** Every tunable's live value, or null with no context built. */
   read(): Record<string, unknown> | null
@@ -718,14 +703,14 @@ export interface CloudsState {
 }
 
 export interface CloudsSettings extends CloudsHandle {
-  /** Follow a new context; the page's settings reach it at its first `flush`. */
+  /** Initialize a context before warm-up and follow later page writes. */
   attach(
     context: CloudsContext,
     frame: () => Readonly<Record<string, unknown>>,
   ): void
   /**
-   * Write what `context` is owed: called by the system that holds it, after
-   * a frame its own pass drew. A context no longer followed is left alone.
+   * Write what `context` is owed: called by the system that holds it, before
+   * its own frame. A context no longer followed is left alone.
    */
   flush(context: CloudsContext): void
   detach(context: CloudsContext): void
@@ -804,7 +789,7 @@ export function createCloudsSettings(
     for (const follower of followed.values()) follower.preset = true
   }
 
-  return {
+  const settings: CloudsSettings = {
     tunables: CLOUDS_TUNABLES,
     cloudTypes: cloudTypePresetNames,
     presets: () =>
@@ -854,13 +839,14 @@ export function createCloudsSettings(
       frame: newest()?.[1].frame() ?? null,
     }),
     attach(context, frame) {
-      // A context is built at the port's own `high`, with no cloud type.
+      // r187 compiles every preset on its first frame, including the warm-up.
       followed.set(context, {
         frame,
-        preset: preset !== 'high',
+        preset: true,
         cloudType: cloudType !== null,
         paths: new Set(overrides.keys()),
       })
+      settings.flush(context)
     },
     flush(context) {
       const follower = followed.get(context)
@@ -874,6 +860,8 @@ export function createCloudsSettings(
         context.lightShaftsHalfResolution =
           PORT_DEFAULT_LIGHT_SHAFTS_HALF_RESOLUTION
         context.qualityPreset = preset
+        // The game camera reaches 10^10 m. Fit the cascades to the cloud march.
+        context.shadow.maxFar = 200_000
       }
       if (follower.cloudType) {
         follower.cloudType = false
@@ -906,4 +894,5 @@ export function createCloudsSettings(
       followed.delete(context)
     },
   }
+  return settings
 }

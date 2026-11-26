@@ -23,7 +23,10 @@ const WEBGL = { backend: {} }
 
 const system = { name: 'takram' } as unknown as CloudChainFactory
 const native = { name: 'native' } as unknown as CloudChainFactory
-const handle = { name: 'tunables' } as unknown as CloudsHandle
+const handle = {
+  state: () => ({ preset: 'high' }),
+  preset: vi.fn(),
+} as unknown as CloudsHandle
 
 function deferred<T>(): {
   promise: Promise<T>
@@ -50,7 +53,7 @@ function page(options: { webgpu?: boolean } = {}) {
   >[] = []
   const loaders: CloudsLoaders = {
     native: () => Promise.resolve(native),
-    takram: vi.fn(() => {
+    port: vi.fn(() => {
       const load = deferred<{
         factory: CloudChainFactory
         handle: CloudsHandle
@@ -81,6 +84,17 @@ describe('the canvas’s clouds', () => {
       cloudTunables: handle,
       cloudSkyTable: false,
     })
+  })
+
+  it('applies the latest setting when the cloud assets finish loading', async () => {
+    const { loads, loaders, canvas } = page()
+    canvas.setQuality('low')
+    const built = canvas.withClouds(renderer(WEBGPU), SETTING_CLOUDS)({})
+    expect(loaders.port).toHaveBeenCalledWith('low')
+    canvas.setQuality('medium')
+    loads[0]!.resolve({ factory: system, handle })
+    await built
+    expect(handle.preset).toHaveBeenLastCalledWith('medium')
   })
 
   it('lets no retired canvas publish over the canvas that replaced it', async () => {
@@ -119,7 +133,7 @@ describe('the canvas’s clouds', () => {
   it('loads nothing for the setting where the browser offers no WebGPU', async () => {
     const { loaders, canvas } = page({ webgpu: false })
     await canvas.withClouds(renderer(WEBGL), SETTING_CLOUDS)({})
-    expect(loaders.takram).not.toHaveBeenCalled()
+    expect(loaders.port).not.toHaveBeenCalled()
   })
 
   it('draws without the setting’s clouds when their load fails, and fails a link’s canvas', async () => {
@@ -129,23 +143,20 @@ describe('the canvas’s clouds', () => {
     expect(await optional).toBe(WEBGPU)
     expect(target.cloudSystemFactory).toBeNull()
     const linked = canvas.withClouds(renderer(WEBGPU), {
-      kind: 'takram',
-      preset: null,
+      kind: 'port',
+      preset: 'high',
     })({})
     loads[1]!.reject(new Error('offline'))
     await expect(linked).rejects.toThrow('offline')
   })
 
-  it('builds a link’s clouds as it always has, whatever the backend', async () => {
+  it('leaves a linked port unavailable on WebGL and builds the diagnostic march on WebGPU', async () => {
     const { target, loads, canvas } = page()
-    const linked = canvas.withClouds(
-      renderer(WEBGL),
-      cloudRendererOf('takram')!,
-    )({})
+    const linked = canvas.withClouds(renderer(WEBGL), cloudRendererOf('1')!)({})
     loads[0]!.resolve({ factory: system, handle })
     await linked
-    expect(target.cloudSystemFactory).toBe(system)
-    await canvas.withClouds(renderer(WEBGPU), cloudRendererOf('1')!)({})
+    expect(target.cloudSystemFactory).toBeNull()
+    await canvas.withClouds(renderer(WEBGPU), cloudRendererOf('march')!)({})
     expect(target).toEqual({
       cloudSystemFactory: native,
       cloudTunables: null,
@@ -175,7 +186,7 @@ describe('the canvas’s clouds', () => {
     loads[0]!.resolve({ factory: system, handle })
     await on
     expect(buildsClouds()).toBe(false)
-    await canvas.withClouds(watching(webgpu()), cloudRendererOf('1')!)({})
+    await canvas.withClouds(watching(webgpu()), cloudRendererOf('march')!)({})
     expect(seen.at(-1)).toEqual({ clouds: true, sky: true })
     const port = canvas.withClouds(watching(webgpu()), SETTING_CLOUDS)({})
     expect(seen.at(-1)).toEqual({ clouds: true, sky: false })
@@ -184,13 +195,11 @@ describe('the canvas’s clouds', () => {
   })
 
   it('reads a link’s `?clouds=`', () => {
-    expect(cloudRendererOf(null)).toBeNull()
+    expect(cloudRendererOf(null)).toBeUndefined()
     expect(cloudRendererOf('0')).toBeNull()
-    expect(cloudRendererOf('1')).toEqual({ kind: 'native' })
-    expect(cloudRendererOf('takram')).toEqual({ kind: 'takram', preset: null })
-    expect(cloudRendererOf('takram:low')).toEqual({
-      kind: 'takram',
-      preset: 'low',
-    })
+    expect(cloudRendererOf('march')).toEqual({ kind: 'native' })
+    expect(cloudRendererOf('1')).toEqual({ kind: 'port', preset: 'high' })
+    expect(cloudRendererOf('low')).toEqual({ kind: 'port', preset: 'low' })
+    expect(cloudRendererOf('takram')).toBeUndefined()
   })
 })

@@ -1,3 +1,4 @@
+import { CLOUD_QUALITIES } from '../render/cloudQuality.ts'
 import { OUTPUT_PREFERENCES } from '../render/output.ts'
 import {
   GROUND_DETAILS,
@@ -6,6 +7,7 @@ import {
 } from '../render/quality.ts'
 import {
   RENDER_CLOUDS,
+  RENDER_CLOUD_QUALITY,
   RENDER_GAMMA,
   RENDER_PICTURE,
   RENDER_LENS_FLARE,
@@ -68,6 +70,8 @@ export function GraphicsPanel({
 }) {
   const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
   const [clouds, setClouds] = usePersistentState(RENDER_CLOUDS)
+  const [cloudQuality, setCloudQuality] =
+    usePersistentState(RENDER_CLOUD_QUALITY)
   const [gamma, setGamma] = usePersistentState(RENDER_GAMMA)
   const [storedPicture, setPicture] = usePersistentState(RENDER_PICTURE)
   const picture = render.pictureOverride ?? storedPicture
@@ -420,11 +424,11 @@ export function GraphicsPanel({
           detail={
             webgl
               ? 'Needs WebGPU. This renderer is WebGL, so no clouds draw.'
-              : 'Experimental and costly. Weather over worlds with seas; Earth keeps its painted deck. Rebuilds the renderer.'
+              : 'Weather over worlds with seas. Earth keeps its textured deck.'
           }
           changed={changed.clouds}
-          on={clouds}
-          disabled={render.cloudsLinked === true}
+          on={!webgl && (render.cloudsEnabled ?? clouds)}
+          disabled={webgl || render.cloudsLinked === true}
           title={
             render.cloudsLinked === true ? 'Set by the page link' : undefined
           }
@@ -433,6 +437,29 @@ export function GraphicsPanel({
             onNotice(`clouds ${on ? 'on' : 'off'} · rebuilding the renderer`)
           }}
         />
+        <SettingRow label="Cloud quality" changed={changed.cloudQuality}>
+          <OptionGroup
+            label="Cloud quality"
+            values={CLOUD_QUALITIES}
+            labels={{
+              lowEnd: 'Minimum',
+              low: 'Low',
+              medium: 'Medium',
+              high: 'High',
+              ultra: 'Ultra',
+            }}
+            value={render.cloudQualityOverride ?? cloudQuality}
+            disabled={() =>
+              webgl
+                ? 'Requires WebGPU'
+                : render.cloudsLinked
+                  ? 'Set by the page link'
+                  : undefined
+            }
+            onChange={setCloudQuality}
+            className="max-w-full flex-wrap"
+          />
+        </SettingRow>
       </Section>
 
       {/*
