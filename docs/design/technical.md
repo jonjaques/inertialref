@@ -14,7 +14,7 @@ every visual decision in [art](art.md).
 |                       |                                                                                                                                                                                |
 | --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Simulation core       | 12 layered TypeScript packages, framework-free below `apps/`                                                                                                                   |
-| Renderer              | Three.js 0.185 `WebGPURenderer` with TSL, via React Three Fiber 9. WebGL 2 backend retained as the fallback                                                                    |
+| Renderer              | Three.js 0.187 `WebGPURenderer` with TSL, via React Three Fiber 9. WebGL 2 backend retained as the fallback                                                                    |
 | Build                 | Vite 8 with the Oxc transform; React Compiler on                                                                                                                               |
 | Runtime               | Node 26, pnpm 12; Node runs the TypeScript sources directly                                                                                                                    |
 | Bundle                | 2.49 MB, **736.0 KB gzip / 555.7 KB brotli**, dominated by Three.js, **no code splitting**                                                                                     |
@@ -60,10 +60,12 @@ passes are implemented in [ADR-0031](../adr/0031-the-sensor-response.md).
 direction, with implementation still planned. It preserves this chain and
 separates Enhanced processing, photographic exposure and display output.
 
-The chain carries no patch to three: the renderer draws nothing for a
-pipeline the warm-up is still building, because `Pipelines.isReady` gates the
-backend's draw, and `warmup.gpu.test.ts` holds that gate
-([ADR-0030](../adr/0030-three-r185.md)).
+The chain carries no patch of its own to three: the renderer draws nothing
+for a pipeline the warm-up is still building, because `Pipelines.isReady`
+gates the backend's draw, and `warmup.gpu.test.ts` holds that gate
+([ADR-0030](../adr/0030-three-r185.md)). The one patch three carries is
+upstream's `compileAsync` rewrite, merged for r188, which makes two compiles
+in flight safe ([ADR-0075](../adr/0075-three-r187.md)).
 
 **What has not**: indirect draw and GPU-driven culling — capabilities in the
 table above that the table promised. The heightfield producer is the one

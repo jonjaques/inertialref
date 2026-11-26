@@ -261,6 +261,7 @@ export const WINGS = [
             'docs/adr/0070-the-weather-is-a-bodys-own-and-a-layer-turns-with-its-world.md',
             'The weather per body',
           ],
+          ['docs/adr/0075-three-r187.md', 'three r187'],
         ],
       },
     ],

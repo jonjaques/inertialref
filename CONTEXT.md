@@ -13884,6 +13884,61 @@ ground at dusk the clouds-on frame is 0.67% RMSE from a clouds-off boot, where
 two clouds-off boots are 6.7% apart, the auto exposure settling at a different
 level on one of them.
 
+## three r187 under the clouds' port: four presets compile on their own first frame, and the cover lifts in 14 s (25 Nov 2026)
+
+The renderer is three 0.187.0 with upstream's `compileAsync` rewrite patched
+in, and the cloud port is 0.1.0-alpha.9 on fork release 8
+([ADR-0075](docs/adr/0075-three-r187.md)). What the clouds plan's phase B
+asked to be taken again, on the Mac mini (Mac18,5, Apple M6), the production
+build of `00ab9437` served by `astro preview`, Chrome, WebGPU, cornerstone
+`weather-g1-fair`:
+
+**The cost table.** The whole frame with the clouds on less the same page with
+them off, `ir.gpu(135)` read three times and the least kept, sixty page frames
+between a toggle and its reads, three pairs a row and their median, one fresh
+page a row, the preset written after a page built at `high`, thermal pressure
+0 throughout. The r185 columns are the 14 Nov entry's.
+
+| Row                               | 1080p, r185 | 1080p, r187 | 2880 × 1800, r185 | 2880 × 1800, r187 |
+| --------------------------------- | ----------- | ----------- | ----------------- | ----------------- |
+| The frame without clouds          | 5.2 ms      | 5.14 ms     | 11.9 ms           | 11.73 ms          |
+| The native renderer               | 7.87        | 5.43        | 8.86              | 7.06              |
+| `lowEnd`                          | 2.49        | 2.62        | 5.63              | 5.58              |
+| `low`                             | 4.50        | 7.13        | 7.10              | 7.18              |
+| `medium`                          | 10.22       | 11.27       | 16.39             | 15.93             |
+| `high`                            | 19.82       | 19.93       | 26.60             | 28.13             |
+| `ultra`                           | 54.89       | 54.60       | 70.12             | 62.14             |
+| `high`, no layer casting a shadow | 8.82        | 19.21       | 15.72             | 15.39             |
+| `high`, `shadow.maxFar` 200 km    | 9.10        | 9.53        | 16.61             | 16.28             |
+
+Each pair's spread is under 0.3 ms but `low` at 2880 × 1800 (0.7). The 1080p
+`medium` and `high` rows are a second take: the first ran beside a typecheck,
+load 5, and read 11.22 and 19.68. The no-shadow row at 1080p reads 19.55 and
+19.21 on two fresh pages, so on r187 turning both layers' shadows off after
+the page drew `high` saves nothing at 1080p where it saves 12.7 ms at
+2880 × 1800. That is §5.5's "the shadow pass's cost follows the flag only at
+the next graph rebuild", and the row is a measurement of that defect, not of
+the shadow. `low` set after `high` is the same defect's: built at `low` from
+its first frame the page reads 9.47 ms whole, 4.33 over the frame without.
+
+**The first-frame compile.** `?clouds=takram:<preset>` builds the port at
+that preset from its first frame. On r185 `low`, `medium` and `lowEnd` failed
+there with `Member "bottomRadius" not found in struct
+"AtmosphereParameters"`. On r187 all five build and draw with no
+`THREE.TSL`, pipeline or shader-module error in the console, and the clouds
+are on the plate. Navigation to first light is 4.25 s at `lowEnd`, 4.04 at
+`low`, 4.24 at `medium` and 14.9 at `high`, where r185 lifted the cover 34 s
+after attach; `ultra`, which did not lift within 90 s on r185, is ready at
+13.6 s. The warm-up's clouds step is 80 ms below `high` and 2.0 s at it.
+
+**The slow turn.** The head turning 2.4° a second of wall clock through
+`ir.aim`, `--cast 300`: 32.6 fps at 1080p and 29.1 fps at 2880 × 1800, no
+isolated frame in either, and both under the rig's 40 fps, so neither is an
+all-clear. The r185 cast read 38.4. A cast frame is downscaled to 1280 px,
+where a dot every four pixels cannot show, so the grain is judged on a
+2880 × 1800 still taken mid-turn at 1:1: no grid of dots, and a few isolated
+bright texels in clear sky.
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

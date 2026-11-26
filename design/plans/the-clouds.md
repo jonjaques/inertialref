@@ -300,16 +300,17 @@ for the over pass, which is rule 69 as it stands.
 
 ### 5.7 Boot and the first frame
 
-**The defect.** The port's pipelines build on the first frame drawn. With
-`high` drawing during boot the cover lifts 34 s after the page attaches at
-1920 × 1080, and not within 90 s at `ultra`. `low`, `medium` and `lowEnd` do
-not compile on a first frame at all, and the adapter works round it by
-building at `high` and writing the preset a frame later.
+**The defect.** The port's pipelines build on the first frame drawn, and
+the adapter builds every context at `high` and writes the preset a frame
+later, a workaround for a first-frame compile failure three 0.187 does not
+have: every preset now builds and draws from its own first frame (build log,
+25 Nov 2026). At 1920 × 1080 navigation to first light is 4.0 to 4.3 s below
+`high`, 14.9 s at `high` and 13.6 s at `ultra`, of which the warm-up's
+clouds step is 2.0 s at `high` and 80 ms below it.
 
-**The route.** Version first: alpha.7 moves the port to three 0.187, and the
-compile failure is tried again there before anyone hunts it in 0.185. Then a
-warm-up through `render/warmup.ts` that draws the port's passes off screen
-behind the cover, at the preset the page will use. The four baked textures
+**The route.** The adapter builds at the preset the page will use, and a
+warm-up through `render/warmup.ts` draws the port's passes off screen behind
+the cover at that preset. The four baked textures
 are 2.86 MB of download, 2.10 MB of it `shape.bin`; brotli on the files is
 measured before any other format is considered.
 
@@ -318,14 +319,15 @@ for the page without clouds, plus two seconds, at `high`.
 
 ### 5.8 The grain
 
-**The defect.** Under a slow turn of 2.4° a second the temporal upscale shows
-grain, and the cast runs at 38.4 fps against the rig's 40 fps all-clear.
+**The defect.** On alpha.9 a 2880 × 1800 still taken mid-turn, at 2.4° a
+second, shows no grid of dots at 1:1, and a few isolated bright texels in
+clear sky (build log, 25 Nov 2026). The turning cast reads 32.6 fps at
+1920 × 1080 and 29.1 at 2880 × 1800, both under the rig's 40 fps all-clear,
+so no cast has yet cleared the turn.
 
-**The route is the version.** alpha.9's notes name a grid of dots, one every
-four pixels, under `temporalUpscale`, fixed by blending the fresh texel with
-its own clipped history; a clip against four neighbors in place of nine; and
-streaks when the render height is not a multiple of four. None of that is
-tried here. The cast is taken again on alpha.9 before any work of ours.
+**The route.** A cast at a rate the rig can trust first: a smaller window or
+`scripts/traceFrames.mjs` over a trace of the same turn. Then the bright
+texels, against alpha.9's `experimental.freshTexelBlend` off and on.
 
 ## 6. The order
 
@@ -335,7 +337,7 @@ request into `the-weather`.
 | Phase | Lands                                                                                                                                                                                              | Done when                                                                                                                                                                                                 |
 | ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A     | **The name.** Landed. The adapter's modules and types carry no upstream's name. `?clouds=takram` stays the selector until phase C                                                                  | No type, module or engine field of ours says takram; the gate and the bundle checks pass                                                                                                                  |
-| B     | **The version.** three 0.187 across the workspace, and the port at alpha.9 with fork build 8. [The frame](the-frame.md) §8 has what else the upgrade carries                                       | `pnpm check`, `pnpm test:gpu` and `pnpm presets:compare --all` pass; the cost table is taken again; the slow-turn cast is taken again; the first-frame compile is tried                                   |
+| B     | **The version.** Landed: three 0.187 with one upstream fix patched in, and the port at alpha.9 with fork build 8 ([ADR-0075](../../docs/adr/0075-three-r187.md))                                   | `pnpm check`, `pnpm test:gpu` and `pnpm presets:compare --all` pass; the cost table is taken again; the slow-turn cast is taken again; the first-frame compile is tried                                   |
 | C     | **The default.** `?clouds=1` builds this renderer, and the native march answers `?clouds=march`. The cornerstones' ledger and plates are taken with this renderer. The presets are in the settings | Every `weather-g*` cornerstone has a plate from this renderer; §5.5's three run-time defects are closed or bounded; a preset is one click; the port's targets have a declared memory figure at both sizes |
 | D     | **One shadow** (§5.1)                                                                                                                                                                              | §5.1                                                                                                                                                                                                      |
 | E     | **Our weather** (§5.2)                                                                                                                                                                             | §5.2                                                                                                                                                                                                      |
@@ -361,9 +363,10 @@ The ones a later phase would otherwise find again:
 
 - The port's composite assumes three's `QuadMesh`, whose v is 0 at the top. A
   plane's uv draws the sky's clouds on the ground.
-- A preset that turns `accurateSunSkyLight` off fails to compile on a first
-  frame on three 0.185, silently in the picture, and makes the frame cheaper.
-  A cost row is refused when the console holds a `THREE.TSL` error.
+- A pipeline the device refuses fails silently in the picture and makes the
+  frame cheaper. On three 0.185 every preset that turns
+  `accurateSunSkyLight` off did so on its first frame. A cost row is refused
+  when the console holds a `THREE.TSL` error.
 - A figure is read after the page's own loop has turned. Read straight after
   back-to-back `ir.gpu` frames, the march is rebuilt and the shadow atlas
   keeps the last preset's size: `high` after `low` reads 21.94 ms with no page
