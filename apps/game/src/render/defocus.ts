@@ -7,10 +7,9 @@ import {
   NodeUpdateType,
   QuadMesh,
   RenderTarget,
-  TempNode,
   Vector2,
   type WebGPURenderer,
-  type Node,
+  Node,
   type NodeBuilder,
   type NodeFrame,
   type PassNode,
@@ -52,7 +51,7 @@ export function irisPattern(
 }
 
 /** Half-resolution near/far layers, with foreground coverage gathered outward. */
-export class DefocusNode extends TempNode<'vec4'> {
+export class DefocusNode extends Node<'vec4'> {
   static get type() {
     return 'DefocusNode'
   }

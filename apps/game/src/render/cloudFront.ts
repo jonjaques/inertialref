@@ -1,7 +1,6 @@
 import {
-  type Node,
+  Node,
   NodeUpdateType,
-  TempNode,
   type Texture,
   type TextureNode,
 } from 'three/webgpu'
@@ -52,7 +51,7 @@ import type { CloudUniforms } from './cloudUniforms.ts'
  * frame node as `child` this runs after the frame's cloud work, whose history
  * pass is what flips the parity.
  */
-export class TextureFollower extends TempNode<'float'> {
+export class TextureFollower extends Node<'float'> {
   static get type(): string {
     return 'TextureFollower'
   }

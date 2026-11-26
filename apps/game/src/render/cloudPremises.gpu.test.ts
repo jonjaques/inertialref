@@ -11,7 +11,7 @@ import {
   Matrix3,
   Mesh,
   MeshBasicNodeMaterial,
-  type Node,
+  Node,
   type NodeFrame,
   NodeMaterial,
   NodeUpdateType,
@@ -28,7 +28,6 @@ import {
   SphereGeometry,
   StorageBufferAttribute,
   StorageTexture,
-  TempNode,
   type Texture,
   UnsignedByteType,
   Vector2,
@@ -201,7 +200,7 @@ async function texels(
  * object whose material holds it: the frame node's shape, and the over
  * pass's.
  */
-class Before extends TempNode<'float'> {
+class Before extends Node<'float'> {
   static get type(): string {
     return 'PremiseBefore'
   }

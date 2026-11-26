@@ -9,10 +9,9 @@ import {
   PlaneGeometry,
   QuadMesh,
   RenderTarget,
-  TempNode,
   Vector2,
   Vector3,
-  type Node,
+  Node,
   type NodeFrame,
   type PassNode,
   type WebGPURenderer,
@@ -93,7 +92,7 @@ const timer = getTimer('game.render')
  * the live path at quarter resolution. An unchanged projection holds its
  * target, independent of exposure, response and output gamut.
  */
-export class GalaxyVolumeNode extends TempNode<'vec4'> {
+export class GalaxyVolumeNode extends Node<'vec4'> {
   static get type() {
     return 'GalaxyVolumeNode'
   }

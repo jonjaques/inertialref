@@ -7,10 +7,9 @@ import {
   NodeUpdateType,
   QuadMesh,
   RenderTarget,
-  TempNode,
   Vector2,
   type WebGPURenderer,
-  type Node,
+  Node,
   type NodeBuilder,
   type NodeFrame,
   type PassNode,
@@ -40,7 +39,7 @@ const TILE = 20
 const LABELS = ['motion tile max', 'motion neighbor max', 'motion blur']
 
 /** Tile-max / neighbor-max motion, bounded by one tile and ordered by depth. */
-export class MotionNode extends TempNode<'vec4'> {
+export class MotionNode extends Node<'vec4'> {
   static get type() {
     return 'MotionNode'
   }

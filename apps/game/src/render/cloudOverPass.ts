@@ -3,13 +3,12 @@ import {
   type Camera,
   ExternalTexture,
   type MRTNode,
-  type Node,
+  Node,
   type NodeFrame,
   NodeUpdateType,
   type Renderer,
   RenderTarget,
   type Scene,
-  TempNode,
   type Texture,
 } from 'three/webgpu'
 import { vec4 } from 'three/tsl'
@@ -343,7 +342,7 @@ function standIn(source: RenderTarget): RenderTarget {
 /* The node                                                                   */
 /* ------------------------------------------------------------------------- */
 
-export class CloudOverPassNode extends TempNode<'vec4'> {
+export class CloudOverPassNode extends Node<'vec4'> {
   static get type(): string {
     return 'CloudOverPassNode'
   }
