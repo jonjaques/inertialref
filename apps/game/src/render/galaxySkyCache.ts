@@ -293,34 +293,27 @@ export class GalaxySkyCache {
     }
     this.#pixelAngle.value = galaxyCubePixelAngle(tile.faceSize)
     target.scissor.set(tile.x, tile.y, tile.width, tile.height)
-    target.scissorTest = true
-    try {
-      runQuadPasses(
-        renderer,
-        this.#quad,
-        // Each tile replaces every texel it covers. Clearing the attachment
-        // would erase all preceding tiles, since GPU load clears ignore
-        // scissor. And the scissor on the renderer as well as the target:
-        // setting only `target.scissorTest` draws a full face for every
-        // tile, which the coverage test observes as an outside texel.
-        { linear: true, autoClear: false, scissor: true },
-        (draw) => draw('galaxy sky', target, this.#material, tile.face),
-      )
-      // After the runner hands the renderer back: a listener the ticket
-      // reaches may draw, and must not inherit the scissor and the kept clear.
-      this.schedule.complete(tile)
-      this.#ticket?.done()
-      this.#select()
-      if (
-        this.available &&
-        (this.schedule.selected!.faceSize >=
-          Math.min(128, this.schedule.faceSize) ||
-          !this.schedule.report.pending)
-      )
-        this.#finishTicket()
-    } finally {
-      target.scissorTest = false
-    }
+    runQuadPasses(
+      renderer,
+      this.#quad,
+      // Each tile replaces every texel it covers. Clearing the attachment
+      // would erase all preceding tiles, since GPU load clears ignore
+      // scissor.
+      { linear: true, autoClear: false, scissor: true },
+      (draw) => draw('galaxy sky', target, this.#material, tile.face),
+    )
+    // After the runner hands the renderer back: a listener the ticket
+    // reaches may draw, and must not inherit the scissor and the kept clear.
+    this.schedule.complete(tile)
+    this.#ticket?.done()
+    this.#select()
+    if (
+      this.available &&
+      (this.schedule.selected!.faceSize >=
+        Math.min(128, this.schedule.faceSize) ||
+        !this.schedule.report.pending)
+    )
+      this.#finishTicket()
     return true
   }
 

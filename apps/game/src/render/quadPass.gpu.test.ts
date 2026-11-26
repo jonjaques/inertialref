@@ -104,6 +104,9 @@ describe('the quad-pass runner', () => {
       expect(renderer.outputColorSpace).toBe(before.color)
       expect(renderer.autoClear).toBe(before.autoClear)
       expect(renderer.getScissorTest()).toBe(before.scissor)
+      // The target's own flag, which three reads for a draw into it, is
+      // the runner's for the length of the draw and no longer.
+      expect(scratch.scissorTest).toBe(false)
     } finally {
       renderer.setRenderTarget(null)
       renderer.setMRT(null)

@@ -34,9 +34,11 @@ export interface QuadPassState {
   /** Clear each target first, or keep what is there; absent leaves the renderer's choice. */
   readonly autoClear?: boolean
   /**
-   * The renderer's scissor test on. Three reads the rectangle from the target
-   * and the enable flag from the renderer, so a pass that set the first needs
-   * this for the second.
+   * The scissor test on, for each draw, against the rectangle the target
+   * carries. Into a target, three reads the rectangle and the enable flag
+   * both from the target, so the target's flag is set for its own draw and
+   * put back after it; the renderer's is set as well, for whatever the
+   * passes draw to the canvas.
    */
   readonly scissor?: boolean
 }
@@ -76,7 +78,13 @@ export function runQuadPasses(
     namePass(into, label)
     renderer.setRenderTarget(into, intoFace)
     quad.material = material
-    quad.render(renderer)
+    const scissored = into.scissorTest
+    if (state.scissor === true) into.scissorTest = true
+    try {
+      quad.render(renderer)
+    } finally {
+      into.scissorTest = scissored
+    }
   }
   try {
     if (state.linear === true) {
