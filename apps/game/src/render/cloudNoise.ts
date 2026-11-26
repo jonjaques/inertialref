@@ -374,7 +374,7 @@ export class CloudNoise implements CloudResource {
   readonly #detail = noiseVolume(CLOUD_DETAIL_TEXELS)
   /** The slice a bake's quad draws, as its texel center. */
   readonly #slice = uniform(0.5)
-  readonly #quad = new QuadMesh()
+  readonly #quad: QuadMesh
   readonly #materials: Readonly<Record<Bake, NodeMaterial>>
   readonly #baked = new Set<Bake>()
   /** What exists on the GPU: a warm-up or a bake has bound it. */
@@ -400,6 +400,7 @@ export class CloudNoise implements CloudResource {
         CLOUD_DETAIL_TEXELS / DETAIL_NOISE_PERIOD,
       ),
     }
+    this.#quad = new QuadMesh(this.#materials.base)
   }
 
   /**

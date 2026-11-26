@@ -52,7 +52,7 @@ export class MotionNode extends TempNode<'vec4'> {
     material: new NodeMaterial(),
   }))
   #disposed = false
-  readonly #quad = new QuadMesh()
+  readonly #quad = new QuadMesh(this.#stages[0]!.material)
   readonly #size = new Vector2()
   readonly outputTexture = passTexture(
     this as unknown as PassNode,

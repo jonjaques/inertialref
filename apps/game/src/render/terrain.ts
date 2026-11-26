@@ -16,6 +16,7 @@ import {
   type Texture,
   Vector2,
   type Node,
+  type TextureNode,
   type UniformNode,
   Vector3,
   Vector4,
@@ -1590,7 +1591,7 @@ function sampled(
     .rgb as unknown as ReturnType<typeof vec3>
 }
 
-type TextureLike = ReturnType<typeof texture>
+type TextureLike = TextureNode
 
 /** One deposit's uniforms: what it reflects, and how it takes the light. */
 function deposit(): Deposit {

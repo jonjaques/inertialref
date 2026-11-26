@@ -9,6 +9,7 @@ import {
   UnsignedByteType,
   Vector2,
   Vector3,
+  type TextureNode,
   type WebGPURenderer,
 } from 'three/webgpu'
 import {
@@ -404,7 +405,7 @@ export class CloudMaps implements CloudResource, CloudCubeFreshness {
     corner: uniform(new Vector2()),
   }
   readonly #material = new NodeMaterial()
-  readonly #quad = new QuadMesh()
+  readonly #quad = new QuadMesh(this.#material)
   #allocated: 'none' | 'stand-in' | 'full' = 'none'
   #generation = 0
   /** The generation each face was baked in; −1 before its first bake. */
@@ -428,8 +429,8 @@ export class CloudMaps implements CloudResource, CloudCubeFreshness {
       map.name = CHANNELS[k]!
     })
     const [cover, kind] = this.#target.textures.map((map) => texture(map)) as [
-      ReturnType<typeof texture>,
-      ReturnType<typeof texture>,
+      TextureNode,
+      TextureNode,
     ]
     // One atlas uv a direction node, shared by the reads of a bake.
     const uvs = new WeakMap<Node<'vec3'>, Node<'vec2'>>()

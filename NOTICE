@@ -30,11 +30,12 @@ three-clouds-webgpu
   Packages: three-clouds-webgpu
 
 Takram three-geospatial and three-atmosphere
-  Shota Matsuda and John Fewell, https://github.com/johnfewell/three-geospatial/releases/tag/fork-release-7
+  Shota Matsuda and John Fewell, https://github.com/johnfewell/three-geospatial/releases/tag/fork-release-8
   Licensed MIT.
-  Fewell’s release 7 adds four-lane ray–sphere intersections, fixes the
-  atmospheric scattering kernels for Three.js r186 and marks the fork in both
-  packages. InertialRef vendors the geospatial release tarball unchanged.
+  Fewell’s release 8 adds four-lane ray–sphere intersections, fixes the
+  atmospheric scattering kernels for Three.js r186, declares its types against
+  r187 and marks the fork in both packages. InertialRef vendors the geospatial
+  release tarball unchanged.
   Packages: @takram/three-geospatial, @takram/three-atmosphere
 
 Precomputed Atmospheric Scattering reference implementation

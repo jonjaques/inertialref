@@ -248,7 +248,7 @@ export class CloudClipmap implements CloudResource {
   })
   /** One bake a layer, clipmap level k's cloud level j at 3k + j, each reading its own uniforms. */
   readonly #materials: readonly NodeMaterial[]
-  readonly #quad = new QuadMesh()
+  readonly #quad: QuadMesh
   #allocated: 'none' | 'stand-in' | 'full' = 'none'
   /** The render a level went stale on, or null while it is whole. */
   readonly #staleSince: (number | null)[] = Array.from(
@@ -365,6 +365,7 @@ export class CloudClipmap implements CloudResource {
           return material
         }),
       )
+    this.#quad = new QuadMesh(this.#materials[0]!)
   }
 
   /**

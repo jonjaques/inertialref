@@ -67,7 +67,7 @@ export class PsfNode extends TempNode<'vec4'> {
   readonly upSteps = Array.from({ length: LEVELS }, () =>
     uniform(new Vector2(1, 1)),
   )
-  readonly #quad = new QuadMesh()
+  readonly #quad = new QuadMesh(this.#stages[0]!.material)
   readonly #size = new Vector2()
   readonly outputTexture = passTexture(
     this as unknown as PassNode,

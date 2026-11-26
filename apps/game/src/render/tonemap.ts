@@ -1,9 +1,4 @@
-import {
-  CustomToneMapping,
-  type Node,
-  type Renderer,
-  type ToneMapping,
-} from 'three/webgpu'
+import { CustomToneMapping, type Node, type Renderer } from 'three/webgpu'
 import {
   clamp,
   colorSpaceToWorking,
@@ -238,12 +233,15 @@ export function installToneCurve(
       )
   })
 
-  // `@types/three` declares `NodeLibrary` as an empty class; the method is
-  // there at runtime, in `renderers/common/nodes/NodeLibrary.js`.
-  const library = renderer.library as {
-    addToneMapping(curve: typeof toneCurve, toneMapping: ToneMapping): void
-  }
-  library.addToneMapping(toneCurve, CustomToneMapping)
+  // `NodeLibrary.addToneMapping` is typed over bare `Node` parameters, and a
+  // curve whose parameters are typed is not assignable to that. The library
+  // calls it with the vec3 color and the float exposure the curve declares.
+  renderer.library.addToneMapping(
+    toneCurve as unknown as Parameters<
+      Renderer['library']['addToneMapping']
+    >[0],
+    CustomToneMapping,
+  )
   selectToneCurve(renderer)
 
   const controls = {

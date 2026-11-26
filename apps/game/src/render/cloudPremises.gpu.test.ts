@@ -261,7 +261,7 @@ describe('a RenderTarget3D slice', () => {
       const value = uniform(0)
       const material = new NodeMaterial()
       material.fragmentNode = vec4(value, value, 0, 1)
-      const quad = new QuadMesh()
+      const quad = new QuadMesh(material)
       const before = gpu.pipelinesBuilt()
       await checked(() =>
         warmSensorPass(renderer, quad, [{ target: volume, material }]),
@@ -312,7 +312,7 @@ describe('a 2D-array MRT target', () => {
       premise2: vec4(0.6, layer, 0, 1),
       premise3: vec4(0.8, layer, 0, 1),
     })
-    const quad = new QuadMesh()
+    const quad = new QuadMesh(material)
     const before = gpu.pipelinesBuilt()
     await checked(() =>
       warmSensorPass(renderer, quad, [{ target: maps, material }]),
@@ -385,7 +385,7 @@ function nested(
   })().compute(16)
   const nestedMaterial = new NodeMaterial()
   nestedMaterial.fragmentNode = texture(storageMap, uv())
-  const nestedQuad = new QuadMesh()
+  const nestedQuad = new QuadMesh(nestedMaterial)
   const seen = { context: false, target: false, runs: 0 }
   const frameNode = new Before((three) => {
     const context = (three as unknown as Internals)._currentRenderContext
