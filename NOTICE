@@ -122,7 +122,7 @@ Astro and its React integration
   Fred K. Schott and Astro contributors, https://github.com/withastro/astro
   Licensed MIT.
   Static pages and the browser code that hydrates the game shell.
-  Packages: astro, @astrojs/react
+  Packages: astro, @astrojs/react, @astrojs/react-renderer
 
 Vite browser helpers
   Evan You and Vite contributors, https://github.com/vitejs/vite

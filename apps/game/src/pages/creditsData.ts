@@ -165,7 +165,7 @@ export const SOFTWARE_CREDITS: readonly SoftwareCredit[] = [
     url: 'https://github.com/withastro/astro',
     license: 'MIT',
     use: 'Static pages and the browser code that hydrates the game shell.',
-    packages: ['astro', '@astrojs/react'],
+    packages: ['astro', '@astrojs/react', '@astrojs/react-renderer'],
   },
   {
     name: 'Vite browser helpers',
