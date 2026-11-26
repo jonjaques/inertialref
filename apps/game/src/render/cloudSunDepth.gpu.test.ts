@@ -1609,17 +1609,21 @@ describe('the grid as a resource', () => {
       const got = sun(sample, medium(sample, body), body)
       out.element(0).assign(got.cloud.add(got.depth.x))
     })().compute(1)
+    // Built as three builds a kernel: a builder over no object, handed the
+    // kernel as its `compute`.
     const renderer = gpu.renderer as unknown as {
       backend: {
         createNodeBuilder(
-          node: ComputeNode,
+          object: null,
           renderer: unknown,
-        ): { build(): unknown }
+        ): { compute: ComputeNode | null; build(): unknown }
       }
     }
-    expect(() =>
-      renderer.backend.createNodeBuilder(kernel, gpu.renderer).build(),
-    ).toThrow(/^CloudSun\.depth: this sun was formed without \{ depth: true \}/)
+    const builder = renderer.backend.createNodeBuilder(null, gpu.renderer)
+    builder.compute = kernel
+    expect(() => builder.build()).toThrow(
+      /^CloudSun\.depth: this sun was formed without \{ depth: true \}/,
+    )
     kernel.dispose()
     dispose(test)
   })

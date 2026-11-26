@@ -76,6 +76,10 @@ import {
 import { createAtmosphereMaterial } from './materials.ts'
 import { createPlanetMaterial } from './planet.ts'
 import { runQuadPasses } from './quadPass.ts'
+import { DEFAULT_PICTURE } from './picture.ts'
+import { sceneBackend, sceneLayout } from './sceneLayout.ts'
+import { warmTargetFor } from './sceneTarget.ts'
+import { sensorMrt } from './sensorMrt.ts'
 import { createTerrainMaterial } from './terrain.ts'
 import { warmCompute, warmSensorPass } from './warmup.ts'
 import { createWaterMaterial } from './water.ts'
@@ -860,7 +864,21 @@ describe('a table on the air’s bundle that no graph reads', () => {
         (child) => child.name === 'cloud composite',
       )!
       composite.visible = true
-      const drawn = await gpu.shader(composite, rig.camera, rig.scene)
+      // Asked for against what pass B draws it into: the scene pass's
+      // target and outputs. With nothing bound the composite's outputs
+      // match no attachment, and its program is one no device takes.
+      const layout = sceneLayout(DEFAULT_PICTURE, sceneBackend(renderer))
+      const target = renderer.getRenderTarget()
+      const mrt = renderer.getMRT()
+      renderer.setRenderTarget(warmTargetFor(renderer, layout))
+      renderer.setMRT(sensorMrt(layout))
+      let drawn: { vertexShader: string; fragmentShader: string }
+      try {
+        drawn = await gpu.shader(composite, rig.camera, rig.scene)
+      } finally {
+        renderer.setMRT(mrt)
+        renderer.setRenderTarget(target)
+      }
       return {
         // `materials.ts`, `planet.ts`, `terrain.ts`, `water.ts`.
         shell: await programOf(
