@@ -1,6 +1,9 @@
 import { expect, it } from 'vitest'
-import { NodeUpdateType } from 'three/webgpu'
+import { context, vec4 } from 'three/tsl'
+import { clouds } from 'three-clouds-webgpu'
+import { NodeUpdateType, PerspectiveCamera, type Node } from 'three/webgpu'
 import { createCloudsAtmosphere } from './cloudsAtmosphere.ts'
+import { CLOUD_QUALITIES } from './cloudQuality.ts'
 import { openGpu } from './gpuHarness.ts'
 
 it('retires the pending cloud table bake with its atmosphere context', async () => {
@@ -21,3 +24,34 @@ it('retires the pending cloud table bake with its atmosphere context', async () 
     gpu.dispose()
   }
 })
+
+it.each(CLOUD_QUALITIES)(
+  'compiles the %s cloud march on the first frame of a new renderer',
+  async (preset) => {
+    const gpu = await openGpu()
+    const atmosphere = createCloudsAtmosphere()
+    const pass = clouds({ sceneDepth: null })
+    const camera = new PerspectiveCamera(50, 1, 0.1, 1e10)
+    pass.camera = camera
+    atmosphere.camera = camera
+    atmosphere.raymarchScattering = false
+    atmosphere.lutNode.updateBeforeType = NodeUpdateType.NONE
+    const settings = pass.cloudsContext
+    settings.qualityPreset = preset
+    settings.shadow.maxFar = 200_000
+    gpu.renderer.contextNode = context({
+      getAtmosphere: () => atmosphere,
+      getClouds: () => settings,
+    })
+    const layer = pass.composite(vec4(0))
+    try {
+      await gpu.drawGraph(layer as unknown as Node)
+    } finally {
+      layer.dispose()
+      pass.dispose()
+      settings.dispose()
+      atmosphere.dispose()
+      gpu.dispose()
+    }
+  },
+)
