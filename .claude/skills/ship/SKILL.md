@@ -1,16 +1,16 @@
 ---
 name: ship
-description: Take finished, verified work to a pull request — brought up to date with origin/main, committed in house style, pushed, opened ready rather than draft, with CI watched. It runs no gate; the checks are CI's and the evidence is what was gathered during the work. Review is /code-review, which the user invokes next.
+description: Take finished, verified work to a pull request — brought up to date with origin/main, committed in house style, pushed, opened ready rather than draft, with CI watched. Use it without asking once the work on a branch is verified. It runs no gate; the checks are CI's and the evidence is what was gathered during the work. Merging is the user's, and review is /code-review, which the user invokes next.
 argument-hint: '[branch name or PR title]'
-disable-model-invocation: true
 allowed-tools: Bash(git status:*) Bash(git diff:*) Bash(git log:*) Bash(git show:*) Bash(git add:*) Bash(git commit:*) Bash(git switch:*) Bash(git checkout -b:*) Bash(git fetch:*) Bash(git rebase:*) Bash(git merge origin/main) Bash(git merge --continue) Bash(git merge --abort) Bash(git push:*) Bash(gh pr create:*) Bash(gh pr edit:*) Bash(gh pr view:*) Bash(gh pr diff:*) Bash(gh pr checks:*) Bash(gh pr comment:*) Bash(gh run list:*) Bash(gh run view:*) Bash(gh run watch:*) Bash(gh api:*) Bash(pnpm check:*) mcp__t3-code__link_pull_request mcp__t3-code__watch_pull_request
 ---
 
 # Ship it
 
-Never invoked automatically. **Invoking it is the approval for everything in it** —
-rebasing or merging `origin/main` in, committing, branching, pushing, opening the pull
-request and editing it.
+An agent runs it on its own once the work is verified, and the user may run it too.
+**The project's standing approval covers everything in it** — rebasing or merging
+`origin/main` in, committing, branching, pushing, opening the pull request and editing
+it. Merging the pull request is not part of it; that stays with the user.
 Nothing in it prompts: `git push` and `gh pr create` are allowed in
 `.claude/settings.json`, and the one act that still asks is merging to `main`, which
 is not part of this.
