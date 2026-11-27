@@ -31,8 +31,8 @@ const log = getLogger('game.clouds')
  * The renderer a canvas builds the clouds with: the native march at `?clouds=march`,
  * the port at `?clouds=1`, and at `?clouds=low` the port built at
  * that quality preset from its first frame. `optional` is the player's
- * setting's: a load that fails, or a renderer that is not WebGPU, leaves
- * the page drawing without clouds, where a link's fails the canvas, loudly.
+ * setting's: an asset failure leaves an ordinary page drawing without clouds
+ * and fails a diagnostic link. On WebGL the port is unavailable in either case.
  */
 export type CloudRenderer =
   | { readonly kind: 'native' }

@@ -27,7 +27,7 @@ import {
 } from 'three/tsl'
 import { getLogger } from '@inertialref/shared'
 import type { CloudRadiance } from '@inertialref/devtools'
-import { screenTexel, traceScreen } from './cloudGeometry.ts'
+import { screenTexel, traceScreen } from './cloudScreen.ts'
 import { sceneRadianceGain } from './radiance.ts'
 
 /*
