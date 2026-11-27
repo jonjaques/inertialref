@@ -560,7 +560,7 @@ describe('what the capture refuses', () => {
     const script = await readFile(file, 'utf8')
     const firstLight = (liftAt) => {
       let now = 0
-      return vm.runInNewContext(script, {
+      return vm.runInNewContext(wrap(script), {
         ir: { status: () => ({ boot: now >= liftAt ? 'booted' : 'drawing' }) },
         performance: { now: () => now },
         setTimeout: (resume, ms) => {
