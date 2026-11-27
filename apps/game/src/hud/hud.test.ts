@@ -24,6 +24,7 @@ import { NavCluster } from './NavCluster.tsx'
 import { formatSpeed } from './navCluster.ts'
 import { type Connection, DISCONNECTED } from '../net/health.ts'
 import { OUTPUT_PREFERENCES } from '../render/output.ts'
+import { CLOUD_QUALITIES } from '../render/cloudQuality.ts'
 import {
   PICTURE_AA,
   PICTURE_SCALES,
@@ -332,19 +333,23 @@ describe('the author’s instruments', () => {
     expect(variation).toContain(
       'Uneven valve timing and tiny settling puffs. Visual only.',
     )
-    // Lens flare, the clouds and thruster variation are off; rocks are on.
     expect(graphics).toContain('Volumetric clouds')
     const clouds = graphics
       .split('<label')
       .find((row) => row.includes('Volumetric clouds'))
-    expect(clouds).toContain('role="switch" aria-checked="false"')
+    expect(clouds).toContain('role="switch" aria-checked="true"')
     expect(graphics.match(/role="switch"/g)).toHaveLength(4)
     expect(graphics).toMatch(/role="switch" aria-checked="false"/)
     expect(graphics).toMatch(/role="switch" aria-checked="true"/)
-    // Ship, output and surface choices stay visible as radio groups.
-    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(8)
+    const quality = graphics
+      .split('aria-label="Cloud quality"')[1]
+      ?.split('</div>')[0]
+    expect(quality?.match(/role="radio"/g)).toHaveLength(CLOUD_QUALITIES.length)
+    expect(quality).toMatch(/aria-checked="true"[^>]*>High</)
+    expect(graphics.match(/role="radiogroup"/g)).toHaveLength(9)
     expect(graphics.match(/role="radio"/g)).toHaveLength(
       SHIP_IDS.length +
+        CLOUD_QUALITIES.length +
         PICTURE_AA.length +
         PICTURE_SCALES.length +
         PICTURE_SHARPNESS.length +
@@ -354,7 +359,7 @@ describe('the author’s instruments', () => {
         SEA_DETAILS.length,
     )
     // One checked per group.
-    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(8)
+    expect(graphics.match(/role="radio" aria-checked="true"/g)).toHaveLength(9)
     expect(graphics).toMatch(/aria-checked="true"[^>]*>MSAA</)
     for (const labels of Object.values(PICTURE_LABELS))
       for (const label of Object.values(labels))
