@@ -530,6 +530,7 @@ describe('the drop rule, over rates and jitter', () => {
 describe('what the capture refuses', () => {
   const read = {
     mode: 'standard',
+    boot: 'booted',
     chrome: false,
     settled: { ok: true },
     weather: 'drawn',
@@ -537,6 +538,40 @@ describe('what the capture refuses', () => {
     cloud: { texels: 81_000, share: 0.4 },
   }
   const E1 = 'weather-e1-cumulus-orbit'
+
+  it('refuses a settled trace while the boot cover is still drawing', () => {
+    expect(() =>
+      checkStill(E1, 'volume', { ...read, boot: 'drawing' }),
+    ).toThrow(/drawing.*refused/)
+  })
+
+  it('waits for first light before settling every fresh capture and times out on a stuck cover', async () => {
+    const cast = castByKey('weather-g6-descent-fast')
+    const takes = [
+      stillArgs(E1, 'volume', 'plate.png'),
+      castArgs(cast, true),
+      sampleArgs(cast, [0], ['sample.png']),
+    ]
+    const file = takes[0][takes[0].indexOf('--file') + 1]
+    for (const args of takes)
+      expect(
+        args.slice(args.indexOf('--settle') - 2, args.indexOf('--settle')),
+      ).toEqual(['--file', file])
+    const script = await readFile(file, 'utf8')
+    const firstLight = (liftAt) => {
+      let now = 0
+      return vm.runInNewContext(script, {
+        ir: { status: () => ({ boot: now >= liftAt ? 'booted' : 'drawing' }) },
+        performance: { now: () => now },
+        setTimeout: (resume, ms) => {
+          now += ms
+          resume()
+        },
+      })
+    }
+    await expect(firstLight(20_000)).resolves.toBe('booted')
+    await expect(firstLight(Infinity)).rejects.toThrow(/first light.*drawing/)
+  })
 
   it('a still not settled, not in SDR, with the interface up, not in its arm’s weather, or not drawing its own body’s volume', () => {
     expect(checkStill(E1, 'volume', read)).toBe(read)
@@ -876,6 +911,7 @@ describe('what the capture refuses', () => {
         Math,
         ir: {
           cloudRadiance: async () => capture,
+          status: () => ({ boot: 'booted' }),
           observatory: {
             time: 1,
             status: () => ({
@@ -913,6 +949,7 @@ describe('what the capture refuses', () => {
       meanCloud: 2,
       meanClear: 0.5,
     })
+    expect(read.boot).toBe('booted')
     expect(read.weather).toBe('drawn')
     expect(read.processing).toBe('enhanced')
     expect(read.sun.place.latitude).toBeCloseTo(0.1 / DEG, 9)

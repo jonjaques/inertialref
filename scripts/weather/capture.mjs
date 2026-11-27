@@ -28,7 +28,7 @@
  * in a `finally`, because a Chrome left up holds the lock against every other
  * job on the machine.
  *
- * **A still** waits on `ir.settled()`, which waits on the clouds' history and
+ * **A still** waits for first light, then for `ir.settled()`, which checks the history and
  * caches as well, then reads back what the page drew and shoots. A take whose
  * settle did not finish, whose renderer is not in standard SDR, whose weather
  * is not its arm's, or whose volume serves no body is refused, never kept: a
@@ -335,6 +335,11 @@ const plateQueries = (clouds, renderer) =>
   ].flatMap((q) => ['--query', q])
 
 const settle = ['--settle', String(SETTLE_BUDGET)]
+const firstSettle = [
+  '--file',
+  path.join(ROOT, 'scripts/weather/firstLight.mjs'),
+  ...settle,
+]
 
 /**
  * What a take reads back of the page: the renderer, the stance as the
@@ -342,7 +347,7 @@ const settle = ['--settle', String(SETTLE_BUDGET)]
  * settle, the clouds' report with its levers and extents, and what became
  * of the picture's weather after the clouds' chunk arrived.
  */
-export const STATE = `({ mode: engine.gl.description.mode, chrome: engine.chrome, port: engine.cloudTunables?.state() ?? null, lens: engine.lens, time: ir.observatory.time, stance: (() => { const s = ir.observatory.status(); return { address: s.target?.address ?? null, state: s.state, look: s.look, surface: s.surface?.stance ?? null } })(), processing: engine.sensorSettings.mode, sun: (() => { const s = ir.observatory.status(); if (s.surface === null || s.target === null) return null; const at = s.surface.stance; return ir.sun(s.target.address, { latitude: (at.latitude * 180) / Math.PI, longitude: (at.longitude * 180) / Math.PI }) })(), light: ir.light(), settled: ir.settled(), clouds: ir.clouds(), weather: engine.pictureWeather.outcome, build: ir.build() })`
+export const STATE = `({ boot: ir.status().boot, mode: engine.gl.description.mode, chrome: engine.chrome, port: engine.cloudTunables?.state() ?? null, lens: engine.lens, time: ir.observatory.time, stance: (() => { const s = ir.observatory.status(); return { address: s.target?.address ?? null, state: s.state, look: s.look, surface: s.surface?.stance ?? null } })(), processing: engine.sensorSettings.mode, sun: (() => { const s = ir.observatory.status(); if (s.surface === null || s.target === null) return null; const at = s.surface.stance; return ir.sun(s.target.address, { latitude: (at.latitude * 180) / Math.PI, longitude: (at.longitude * 180) / Math.PI }) })(), light: ir.light(), settled: ir.settled(), clouds: ir.clouds(), weather: engine.pictureWeather.outcome, build: ir.build() })`
 
 /** A still's read: the state, and the share of the trace's texels holding cloud. */
 export const READ = `(async () => {
@@ -373,7 +378,7 @@ export const stillArgs = (id, arm, file, levers = null, renderer = 'march') => [
   '--preset',
   id,
   ...plateQueries(arm === 'volume', renderer),
-  ...settle,
+  ...firstSettle,
   ...(arm === 'volume' ? leverSteps(levers) : []),
   '--wait',
   String(SETTLE_QUIET),
@@ -415,7 +420,7 @@ export const castArgs = (
   '--preset',
   cast.boot ?? cast.id,
   ...plateQueries(true, renderer),
-  ...settle,
+  ...firstSettle,
   ...(clouds
     ? []
     : ['--js', 'engine.clouds = { ...engine.clouds, on: false }', ...settle]),
@@ -486,7 +491,7 @@ export const sampleArgs = (
   '--preset',
   cast.id,
   ...plateQueries(true, renderer),
-  ...settle,
+  ...firstSettle,
   ...leverSteps(levers),
   '--js',
   INSTALL_PATH,
@@ -504,7 +509,8 @@ export const sampleArgs = (
 ]
 
 /** Refuse a still the page did not take as its arm asks. */
-function checkWeather(read, arm, renderer, refuse) {
+function checkScene(read, arm, renderer, refuse) {
+  if (read.boot !== 'booted') refuse(`the boot phase is ${String(read.boot)}`)
   const port = arm === 'volume' && renderer === 'port'
   const expected = port ? 'renderer-default' : ARM_WEATHER[arm]
   if (read.weather !== expected)
@@ -525,7 +531,7 @@ export function checkStill(id, arm, read, renderer = 'march') {
   if (read.chrome !== false) refuse('taken with the interface up')
   if (read.settled?.ok !== true)
     refuse(`not settled: ${JSON.stringify(read.settled)}`)
-  checkWeather(read, arm, renderer, refuse)
+  checkScene(read, arm, renderer, refuse)
   if (arm === 'volume') {
     checkServed(id, read, refuse)
     if (read.cloud == null) refuse('its trace read back nothing')
@@ -1088,7 +1094,7 @@ async function takeCast({ cast, clouds, out, record, drive, say, levers }) {
       throw new Error(`${name}: ${why}; refused`)
     }
     if (!reads.state) refuse('the cast has no frame reading')
-    checkWeather(reads.state, 'volume', record.renderer, refuse)
+    checkScene(reads.state, 'volume', record.renderer, refuse)
     // The control's clouds are off by its own lever, and serve nothing. A
     // cut's state is read where it boots, before the cut; its settled plate
     // after the cut is the cornerstone's own, and held as a still is.
