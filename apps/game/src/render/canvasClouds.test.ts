@@ -24,7 +24,7 @@ const WEBGL = { backend: {} }
 const system = { name: 'takram' } as unknown as CloudChainFactory
 const native = { name: 'native' } as unknown as CloudChainFactory
 const handle = {
-  currentPreset: 'high',
+  state: () => ({ preset: 'high' }),
   preset: vi.fn(),
 } as unknown as CloudsHandle
 

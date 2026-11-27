@@ -103,7 +103,7 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
   return {
     setQuality(next: CloudQuality): void {
       quality = next
-      if (preferences && preferences.currentPreset !== next)
+      if (preferences && preferences.state().preset !== next)
         preferences.preset(next)
     },
     /**
@@ -155,7 +155,7 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
           const adapter =
             result !== null && 'adapter' in result ? result.adapter : null
           if (optional && adapter !== null) {
-            if (adapter.handle.currentPreset !== quality)
+            if (adapter.handle.state().preset !== quality)
               adapter.handle.preset(quality)
             preferences = adapter.handle
           }
