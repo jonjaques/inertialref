@@ -303,7 +303,10 @@ describe('the capture’s plan', () => {
   it('asks for the flag in the volume arm alone, and settles and waits before it reads and shoots', () => {
     const volume = stillArgs('weather-e1-cumulus-orbit', 'volume', 'a.png')
     const deck = stillArgs('weather-e1-cumulus-orbit', 'deck', 'b.png')
-    expect(volume).toContain('clouds=1')
+    expect(volume).toContain('clouds=march')
+    expect(
+      stillArgs('weather-g6-descent', 'volume', 'g6.png', null, 'port'),
+    ).toContain('clouds=1')
     expect(deck).toContain('clouds=0')
     for (const args of [volume, deck]) {
       for (const query of ['chrome=0', 'layers=0', 'output=standard'])
@@ -568,6 +571,46 @@ describe('what the capture refuses', () => {
     expect(servedAddress('weather-g1-fair')).toBe(
       'g:milky-way/s:P222_3_2_k/b:3',
     )
+  })
+
+  it('accepts a settled port plate only with its own body, its stock weather and the full trace readback', () => {
+    const id = 'weather-g6-descent'
+    const clouds = {
+      on: true,
+      served: servedAddress(id),
+      settle: { pending: false },
+      extents: { trace: [4, 3] },
+    }
+    const port = {
+      ...read,
+      weather: 'renderer-default',
+      port: { preset: 'high', frame: { marches: 130 } },
+      clouds,
+      cloud: { texels: 12, share: 0, meanClear: 0.3, meanCloud: null },
+    }
+    expect(checkStill(id, 'volume', port, 'port')).toBe(port)
+    for (const bad of [
+      { ...port, port: null },
+      { ...port, weather: 'drawn' },
+      { ...port, clouds: { ...clouds, served: null } },
+      { ...port, clouds: { ...clouds, settle: { pending: true } } },
+      { ...port, cloud: { ...port.cloud, texels: 8 } },
+      { ...port, cloud: { ...port.cloud, meanClear: null } },
+    ])
+      expect(() => checkStill(id, 'volume', bad, 'port')).toThrow(/refused/)
+    expect(() => checkStill(id, 'volume', port, 'march')).toThrow(/refused/)
+    expect(
+      parseCapture([
+        '--phase',
+        '1',
+        '--url',
+        URL_,
+        '--renderer',
+        'port',
+        '--only',
+        'g1,g2,g3,g4,g5,g6',
+      ]).stills.map(tagOf),
+    ).toEqual(['g1', 'g2', 'g3', 'g4', 'g5', 'g6'])
   })
 
   it('a take whose page was built from another tree, or from an edited one', () => {

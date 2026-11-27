@@ -301,7 +301,16 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
   })
   const traceOutputs = (): CloudTraceTextures => trace.outputs
   const history = new CloudHistory(uniforms, () => trace.outputs)
-  const radiance = new CloudRadianceMeter(uniforms, () => history.outputs)
+  const radiance = new CloudRadianceMeter(
+    () => ({
+      width: uniforms.trace.size.value.x,
+      height: uniforms.trace.size.value.y,
+      historyWidth: uniforms.trace.history.value.x,
+      historyHeight: uniforms.trace.history.value.y,
+      light: history.outputs.light,
+    }),
+    'transmittance',
+  )
   /** What the system holds past the field's bakes: the field disposes its own. */
   const own = [depth, trace, history] as const
   const resources: readonly CloudResource[] = [...field.bakes, ...own]

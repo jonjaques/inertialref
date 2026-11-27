@@ -6,6 +6,7 @@
  *
  *   pnpm build && pnpm preview &          # 8787; refused if nothing answers
  *   node scripts/weather/capture.mjs --phase 1 --url http://localhost:8787/ --gpu-wait 1800
+ *     --renderer port|march  the game renderer or the native phase-one diagnostic
  *     --only e1,g6        a subset, by the id's picture tag
  *     --twice             each still from two boots, and the pair's difference
  *     --pairs <n>         each still from 2n boots, two at a time: the noise floor
@@ -200,6 +201,7 @@ export function parseCapture(argv) {
       'gpu-wait': { type: 'string', default: '0' },
       port: { type: 'string', default: '9350' },
       only: { type: 'string' },
+      renderer: { type: 'string', default: 'march' },
       twice: { type: 'boolean', default: false },
       pairs: { type: 'string' },
       cut: { type: 'string', multiple: true },
@@ -235,19 +237,24 @@ export function parseCapture(argv) {
     throw new Error(
       '--role is the volume arm’s: candidate, low-anchor or last-accepted',
     )
+  if (!['port', 'march'].includes(values.renderer))
+    throw new Error('--renderer takes port or march')
+  // G5 and G6 are cast starts in the native rubric and baselines in the port's.
+  const stills =
+    values.renderer === 'port' ? CORNERSTONES.map(({ id }) => id) : STILLS
   const tags = values.only === undefined ? null : values.only.split(',')
   const known = CORNERSTONES.map((one) => tagOf(one.id))
   for (const tag of [...(tags ?? []), ...(values.cut ?? [])])
     if (!known.includes(tag))
       throw new Error(`no cornerstone tagged ${tag}; tags: ${known.join(', ')}`)
   for (const tag of values.cut ?? [])
-    if (!STILLS.some((id) => tagOf(id) === tag))
+    if (!stills.some((id) => tagOf(id) === tag))
       throw new Error(`--cut ${tag} names a cast, not a still`)
   const wanted = (id) => tags === null || tags.includes(tagOf(id))
   // `--cut <tag>` is C9's cut to that still, as a cast that keeps its
   // frames; E1's is in the set already, and asking for it again adds none.
   const cuts = (values.cut ?? [])
-    .map((tag) => STILLS.find((id) => tagOf(id) === tag))
+    .map((tag) => stills.find((id) => tagOf(id) === tag))
     .map((id) => cutCast(id, cutFrom(id)))
   // `--cast <id>-<speed>` takes those casts alone, retired or not: one an
   // invocation keeps a run's hold on the GPU lock short on a shared machine.
@@ -286,7 +293,8 @@ export function parseCapture(argv) {
     url: values.url === undefined ? null : new URL(values.url).toString(),
     gpuWaitMs: wait * 1000,
     port: values.port,
-    stills: STILLS.filter(wanted),
+    renderer: values.renderer,
+    stills: stills.filter(wanted),
     twice: values.twice,
     pairs,
     role: values.role,
@@ -320,11 +328,11 @@ export const rigArgs = (options) => [
   '--json',
 ]
 
-const plateQueries = (clouds) =>
-  [...RIG.queries, clouds ? 'clouds=1' : 'clouds=0'].flatMap((q) => [
-    '--query',
-    q,
-  ])
+const plateQueries = (clouds, renderer) =>
+  [
+    ...RIG.queries,
+    clouds ? (renderer === 'port' ? 'clouds=1' : 'clouds=march') : 'clouds=0',
+  ].flatMap((q) => ['--query', q])
 
 const settle = ['--settle', String(SETTLE_BUDGET)]
 
@@ -334,7 +342,7 @@ const settle = ['--settle', String(SETTLE_BUDGET)]
  * settle, the clouds' report with its levers and extents, and what became
  * of the picture's weather after the clouds' chunk arrived.
  */
-export const STATE = `({ mode: engine.gl.description.mode, chrome: engine.chrome, lens: engine.lens, time: ir.observatory.time, stance: (() => { const s = ir.observatory.status(); return { address: s.target?.address ?? null, state: s.state, look: s.look, surface: s.surface?.stance ?? null } })(), processing: engine.sensorSettings.mode, sun: (() => { const s = ir.observatory.status(); if (s.surface === null || s.target === null) return null; const at = s.surface.stance; return ir.sun(s.target.address, { latitude: (at.latitude * 180) / Math.PI, longitude: (at.longitude * 180) / Math.PI }) })(), light: ir.light(), settled: ir.settled(), clouds: ir.clouds(), weather: engine.pictureWeather.outcome, build: ir.build() })`
+export const STATE = `({ mode: engine.gl.description.mode, chrome: engine.chrome, port: engine.cloudTunables?.state() ?? null, lens: engine.lens, time: ir.observatory.time, stance: (() => { const s = ir.observatory.status(); return { address: s.target?.address ?? null, state: s.state, look: s.look, surface: s.surface?.stance ?? null } })(), processing: engine.sensorSettings.mode, sun: (() => { const s = ir.observatory.status(); if (s.surface === null || s.target === null) return null; const at = s.surface.stance; return ir.sun(s.target.address, { latitude: (at.latitude * 180) / Math.PI, longitude: (at.longitude * 180) / Math.PI }) })(), light: ir.light(), settled: ir.settled(), clouds: ir.clouds(), weather: engine.pictureWeather.outcome, build: ir.build() })`
 
 /** A still's read: the state, and the share of the trace's texels holding cloud. */
 export const READ = `(async () => {
@@ -361,10 +369,10 @@ export const READ = `(async () => {
 })()`
 
 /** One still: a fresh boot at the picture, settled, read and shot. */
-export const stillArgs = (id, arm, file, levers = null) => [
+export const stillArgs = (id, arm, file, levers = null, renderer = 'march') => [
   '--preset',
   id,
-  ...plateQueries(arm === 'volume'),
+  ...plateQueries(arm === 'volume', renderer),
   ...settle,
   ...(arm === 'volume' ? leverSteps(levers) : []),
   '--wait',
@@ -397,10 +405,16 @@ const castBefore = (cast) =>
  * plate after. The `--js` steps run in order and each answers in the
  * result's `js` entries in that order; `castReads` finds them by place.
  */
-export const castArgs = (cast, clouds, file = null, levers = null) => [
+export const castArgs = (
+  cast,
+  clouds,
+  file = null,
+  levers = null,
+  renderer = 'march',
+) => [
   '--preset',
   cast.boot ?? cast.id,
-  ...plateQueries(true),
+  ...plateQueries(true, renderer),
   ...settle,
   ...(clouds
     ? []
@@ -462,10 +476,16 @@ export function castReads(cast, clouds, result, levers = null) {
  * shot. The eye never moves by more than the path's own step between two
  * of them, so a settle after a seek is a history's 32 frames, not a boot.
  */
-export const sampleArgs = (cast, frames, files, levers = null) => [
+export const sampleArgs = (
+  cast,
+  frames,
+  files,
+  levers = null,
+  renderer = 'march',
+) => [
   '--preset',
   cast.id,
-  ...plateQueries(true),
+  ...plateQueries(true, renderer),
   ...settle,
   ...leverSteps(levers),
   '--js',
@@ -484,7 +504,18 @@ export const sampleArgs = (cast, frames, files, levers = null) => [
 ]
 
 /** Refuse a still the page did not take as its arm asks. */
-export function checkStill(id, arm, read) {
+function checkWeather(read, arm, renderer, refuse) {
+  const port = arm === 'volume' && renderer === 'port'
+  const expected = port ? 'renderer-default' : ARM_WEATHER[arm]
+  if (read.weather !== expected)
+    refuse(
+      `its weather is ${String(read.weather)}, where the ${arm} arm wants ${expected}`,
+    )
+  if (port && !read.port?.preset) refuse('the port has no active preset')
+  if (!port && read.port != null) refuse('the page loaded the port')
+}
+
+export function checkStill(id, arm, read, renderer = 'march') {
   const refuse = (why) => {
     throw new Error(`${id} (${arm}): ${why}; refused`)
   }
@@ -494,13 +525,29 @@ export function checkStill(id, arm, read) {
   if (read.chrome !== false) refuse('taken with the interface up')
   if (read.settled?.ok !== true)
     refuse(`not settled: ${JSON.stringify(read.settled)}`)
-  if (read.weather !== ARM_WEATHER[arm])
-    refuse(
-      `its weather is ${String(read.weather)}, where the ${arm} arm wants ${ARM_WEATHER[arm]}`,
-    )
+  checkWeather(read, arm, renderer, refuse)
   if (arm === 'volume') {
     checkServed(id, read, refuse)
     if (read.cloud == null) refuse('its trace read back nothing')
+    if (renderer === 'port') {
+      if (
+        !(read.port.frame?.marches > 0) ||
+        read.clouds.settle?.pending !== false
+      )
+        refuse('the port has no settled march')
+      const [width, height] = read.clouds.extents.trace
+      const { texels, share, meanClear, meanCloud } = read.cloud
+      if (
+        texels <= 0 ||
+        texels !== width * height ||
+        !Number.isFinite(share) ||
+        share < 0 ||
+        share > 1 ||
+        (share < 1 && !Number.isFinite(meanClear)) ||
+        (share > 0 && !Number.isFinite(meanCloud))
+      )
+        refuse('the readback lacks a finite luminance for every occupied class')
+    }
   }
   return read
 }
@@ -734,7 +781,7 @@ async function main() {
   const options = parseCapture(process.argv.slice(2))
   if (options.help) {
     console.log(
-      'node scripts/weather/capture.mjs --phase <n> --url <preview> [--gpu-wait <s>] [--only e1,g6] [--twice | --pairs <n>] [--cut e1] [--samples <cast>:<a>..<b>] [--role <role>] [--base <dir|record>] [--no-casts] [--no-default-samples] [--baseline-casts] [--dry-run]',
+      'node scripts/weather/capture.mjs --phase <n> --url <preview> [--gpu-wait <s>] [--renderer port|march] [--only e1,g6] [--twice | --pairs <n>] [--cut e1] [--samples <cast>:<a>..<b>] [--role <role>] [--base <dir|record>] [--no-casts] [--no-default-samples] [--baseline-casts] [--dry-run]',
     )
     return
   }
@@ -793,6 +840,7 @@ async function main() {
     existsSync(path.join(ROOT, file)) ? sha256(path.join(ROOT, file)) : null
   const record = {
     phase: options.phase,
+    renderer: options.renderer,
     commit: git('rev-parse', 'HEAD'),
     tree: treeBuild(),
     levers: options.levers,
@@ -837,13 +885,20 @@ async function main() {
     const still = async (id, arm, file, as) => {
       const take = takeOf(file)
       const levers = arm === 'volume' ? options.levers : null
-      const result = await drive(stillArgs(id, arm, take, levers))
+      const result = await drive(
+        stillArgs(id, arm, take, levers, options.renderer),
+      )
       const read = await keepShot(take, file, () => {
         if (levers !== null && jsValues(result)[0] !== 'set')
           throw new Error(
             `${id} (${arm}): ${String(jsValues(result)[0])}; refused`,
           )
-        const checked = checkStill(id, arm, jsValues(result).at(-1))
+        const checked = checkStill(
+          id,
+          arm,
+          jsValues(result).at(-1),
+          options.renderer,
+        )
         checkBuild(`${id} (${arm})`, checked, record.tree)
         return checked
       })
@@ -1008,7 +1063,13 @@ async function takeCast({ cast, clouds, out, record, drive, say, levers }) {
   const attempts = []
   for (let boot = 1; boot <= CAST_ATTEMPTS; boot += 1) {
     const result = await drive(
-      castArgs(cast, clouds, plate === null ? null : takeOf(plate), levers),
+      castArgs(
+        cast,
+        clouds,
+        plate === null ? null : takeOf(plate),
+        levers,
+        record.renderer,
+      ),
     )
     const reads = castReads(cast, clouds, result, levers)
     if (reads.levers !== 'set') {
@@ -1026,16 +1087,14 @@ async function takeCast({ cast, clouds, out, record, drive, say, levers }) {
     const refuse = (why) => {
       throw new Error(`${name}: ${why}; refused`)
     }
-    if (reads.state?.weather !== 'drawn')
-      refuse(
-        `the picture's weather is ${String(reads.state?.weather)}, not drawn`,
-      )
+    if (!reads.state) refuse('the cast has no frame reading')
+    checkWeather(reads.state, 'volume', record.renderer, refuse)
     // The control's clouds are off by its own lever, and serve nothing. A
     // cut's state is read where it boots, before the cut; its settled plate
     // after the cut is the cornerstone's own, and held as a still is.
     if (clouds) checkServed(cast.boot ?? cast.id, reads.state, refuse)
     checkBuild(name, reads.state, record.tree)
-    if (cast.settled) checkStill(cast.id, 'volume', reads.read)
+    if (cast.settled) checkStill(cast.id, 'volume', reads.read, record.renderer)
     const castStep = result.results.find((one) => one.step === 'cast')
     let verdict
     try {
@@ -1166,7 +1225,13 @@ async function takeSamples({ options, out, record, drive, say, jsValues }) {
       )
       say(`${sample.cast}: settled stills at ${frames[0]}..${frames.at(-1)}`)
       const result = await drive(
-        sampleArgs(cast, frames, files.map(takeOf), options.levers),
+        sampleArgs(
+          cast,
+          frames,
+          files.map(takeOf),
+          options.levers,
+          options.renderer,
+        ),
       )
       // After the levers and the install each frame answers a seek, then a
       // read.
@@ -1175,7 +1240,12 @@ async function takeSamples({ options, out, record, drive, say, jsValues }) {
       const answers = jsValues(result).slice(options.levers === null ? 1 : 2)
       for (const [n, k] of frames.entries()) {
         const read = await keepShot(takeOf(files[n]), files[n], () => {
-          const checked = checkStill(cast.id, 'volume', answers[2 * n + 1])
+          const checked = checkStill(
+            cast.id,
+            'volume',
+            answers[2 * n + 1],
+            options.renderer,
+          )
           checkBuild(`${sample.cast} @ ${k}`, checked, record.tree)
           return checked
         })
