@@ -262,6 +262,10 @@ export const WINGS = [
             'The weather per body',
           ],
           ['docs/adr/0075-three-r187.md', 'three r187'],
+          [
+            'docs/adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md',
+            'The cloud renderer',
+          ],
         ],
       },
     ],
