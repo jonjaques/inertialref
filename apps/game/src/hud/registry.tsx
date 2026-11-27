@@ -1,6 +1,7 @@
-import { Activity, Gauge, MonitorCog, Radio } from 'lucide-react'
+import { Activity, Cloud, Gauge, MonitorCog, Radio } from 'lucide-react'
 import type { DockPanelDefinition } from '../dock/panels.ts'
 import type { DevContext } from './context.ts'
+import { CloudTunablesPanel } from './CloudTunablesPanel.tsx'
 import { ControlsPanel } from './ControlsPanel.tsx'
 import { GraphicsPanel } from './GraphicsPanel.tsx'
 import { PerfPanel } from './PerfPanel.tsx'
@@ -91,6 +92,15 @@ export function devPanels(context: DevContext): readonly DockPanelDefinition[] {
           onCheckConnection={context.onCheckConnection}
         />
       ),
+    },
+    {
+      id: 'cloud-tunables',
+      title: 'Cloud tuning',
+      icon: Cloud,
+      zone: 'right',
+      defaultOpen: false,
+      hint: 'the cloud layers, light and shadow settings',
+      render: () => <CloudTunablesPanel engine={context.engine} />,
     },
     {
       id: 'perf',
