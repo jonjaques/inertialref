@@ -994,7 +994,7 @@ describe('the disk, seen through its own air', () => {
 
 describe('the materials drawn over the clouds, read through a front handle', () => {
   /*
-   * Under `?clouds=1` the ring, the plumes and the entry trace's inks read
+   * Under `?clouds=march` the ring, the plumes and the entry trace's inks read
    * the clouds in front of them (design §4.9), and without a handle each
    * builds the program it always has. The handle's cost is the two knot
    * textures and the two samplers three declares beside them, though the

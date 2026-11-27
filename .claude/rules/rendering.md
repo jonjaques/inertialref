@@ -161,8 +161,9 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   beam rather than beside it, and where a photograph exists it supplies the
   albedo.
 
-- **Anything drawn over the clouds is marked with `markOverClouds`, under
-  `?clouds=1` and only there.** On a frame the clouds draw, the scene pass takes
+- **Mark every object drawn over the clouds with `markOverClouds` when
+  `engine.cloudsAvailable` is true.** Both the default WebGPU port and the
+  native diagnostic (`?clouds=march`) use this split. The scene pass takes
   camera layer 0 and a second pass draws layer 1 over the composite, so an
   overlay left on layer 0 is drawn first and veiled by cloud it stands in front
   of. Mark the object and every descendant — `markOverClouds` does, a `Group`
@@ -170,8 +171,7 @@ Reasoning: `AGENTS.md` § "The rules that actually matter",
   children. The camera tests layer 1 from its creation, in `<Canvas onCreated>`,
   and the lights test every layer: `compileAsync` drops an object whose layers
   the camera's do not test, so a mask set later compiles nothing at boot, and a
-  light on layer 0 alone builds every overlay a second, unlit pipeline. Without
-  the flag nothing is marked and no mask moves. ADR-0063.
+  light on layer 0 alone builds every overlay a second, unlit pipeline. ADR-0063.
 
 - **Look at the perf tab before optimizing anything**, and before believing a performance
   claim in a design document. The first thing it found was that time warp had never worked

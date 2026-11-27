@@ -36,8 +36,7 @@ export interface EntryTraceFront {
  * The distance is the drawn fragment's, rebuilt from its clip position as
  * `expandedLineDepth` rebuilds its depth: Line2 expands its ribbon in its
  * own projection, so `positionView` there is the template's vertex at the
- * object's origin, not the segment's. Without a handle every graph is the
- * one a page without `?clouds=1` has always compiled.
+ * object's origin, not the segment's. The native march provides the front samples.
  */
 function throughClouds(
   color: Node<'vec3'>,

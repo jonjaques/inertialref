@@ -12,7 +12,7 @@ export function CinematicStage({ engine }: { engine: GameEngine }) {
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
   /*
-   * Under `?clouds=1` the sheath and the pad dust draw over the clouds and
+   * With clouds available the sheath and the pad dust draw over the clouds and
    * the staged sky under them: it stands in for the air the clouds are in.
    */
   const effects = useMemo(() => {

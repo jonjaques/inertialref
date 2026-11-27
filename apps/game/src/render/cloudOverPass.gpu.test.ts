@@ -90,7 +90,7 @@ import { warmCompile, warmRenderer } from './warmup.ts'
  * scene pass of the layout's shape on the UNDER layers, the over pass beside
  * it in a post quad's dependency sum after the scene term, and the post
  * drawn from the top. The camera tests layers 0 and 1, as `<Canvas
- * onCreated>` sets it under the flag.
+ * onCreated>` sets them when the cloud factory is available.
  *
  * The scene: an opaque ground over the upper half on layer 0; on the OVER
  * layer, an opaque square over the right half behind the ground and an

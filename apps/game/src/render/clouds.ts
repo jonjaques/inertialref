@@ -73,9 +73,8 @@ import {
 import { warmCompile, warmRenderer } from './warmup.ts'
 
 /*
- * `?clouds=1`: takram's volumetric clouds, through the unofficial
- * WebGPU port `three-clouds-webgpu` as it ships, in the place the native
- * cloud system stands.
+ * The default WebGPU volume uses John Fewell's port of takram's clouds,
+ * `three-clouds-webgpu`. A link can select the same port with `?clouds=1`.
  *
  * The port is used whole and unmodified. Its pass marches the clouds, lights
  * them from takram's own atmosphere and resolves them into its own targets;

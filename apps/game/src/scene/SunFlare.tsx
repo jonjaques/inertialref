@@ -28,7 +28,7 @@ export function SunFlare({ engine }: { engine: GameEngine }) {
   // for good — seven quads with nothing left inside them. R3F removes the
   // primitive from the scene on unmount; the handful of GPU objects live as
   // long as the renderer, like the starfield's do.
-  // Marked where it is made, under `?clouds=1`, so its warm-up compiles it
+  // Mark the flare where it is made so its warm-up compiles it
   // where it is drawn: over the clouds, in pass B.
   const flare = useMemo(() => {
     const made = createLensFlare()

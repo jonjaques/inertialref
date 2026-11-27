@@ -44,7 +44,7 @@ import type { SceneLayout } from './sceneLayout.ts'
 /*
  * The cloud system: owns every cloud resource, builds the frame's state
  * inside `sensor.render()`, runs the frame's passes in §4.2's order through
- * the composite's frame node, and reports. Built only under `?clouds=1`, and
+ * the composite's frame node, and reports. Built only under `?clouds=march`, and
  * only on WebGPU; with its levers off it draws nothing and adds no pass.
  *
  * It orchestrates and holds no shader code. The field and every node set
@@ -178,7 +178,7 @@ export interface CloudSystemFactory extends CloudChainFactory {
 /**
  * What the sensor's chain asks of whichever renderer draws the clouds: the
  * system less the instruments' subjects, which are the native march's own.
- * `?clouds=1`'s system (`clouds.ts`) is one of these and no more.
+ * The default port implements this interface in `clouds.ts`.
  */
 export type CloudChainSystem = Omit<CloudSystem, 'resources' | 'field'>
 

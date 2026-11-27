@@ -3,7 +3,7 @@
  * march. `cloudLevers` refuses a budget past the bound, and `cloudLevers` is
  * in `App`'s static graph: a lever that reads the bound from `cloudMarch`
  * takes the march, the weather field and the mie table into every page, the
- * ones without `?clouds=1` among them. So this module imports nothing, and
+ * default port included. So this module imports nothing, and
  * `pnpm graph` refuses an edge from `App` to the march.
  */
 

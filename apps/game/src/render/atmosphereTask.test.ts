@@ -439,7 +439,7 @@ describe('render.convolvePhase', () => {
   })
 
   it('costs a page without clouds nothing: a registry served and a haze baked convolve and decode no table', async () => {
-    // The page without `?clouds=1` builds no cloud system, so no `CloudPhase`
+    // A page with clouds disabled builds no cloud system, so no `CloudPhase`
     // and no `serve` (`cloudSensor.gpu.test.ts`, "builds nothing of the
     // clouds"). What it does build is the worker's registry, which holds
     // this task, and the air's bake on the same pool.

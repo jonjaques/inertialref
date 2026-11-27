@@ -92,8 +92,7 @@ import { sensorRadiance } from './radiance.ts'
  * It is additive, so the light of the cloud in front is already in the frame
  * under it and the plume's own light is only attenuated: `color·T`. A plume
  * is at the ship, in the near field, so its view distance is true meters.
- * Without a handle every graph is the one a page without `?clouds=1` has
- * always compiled.
+ * Only the native march supplies front samples.
  */
 
 /** Hull axes, meters. */

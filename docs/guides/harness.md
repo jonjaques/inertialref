@@ -482,19 +482,17 @@ a warning. This differs from canonical-save drift reporting.
 and current limitation.
 
 **A picture can hold its weather.** Version 3 adds `weather: { regime }`, a
-scenario's id or `'climate'`. `takePicture` returns `weather: 'drawn'` for
-a known request under `?clouds=1` on WebGPU. The port returns
-`'renderer-default'` because it uses its own weather map. A page without
-volumetric clouds, WebGL, or an unknown regime returns `'unavailable'`, and
-a picture without a weather request returns `'none'`. `ir.clouds()` reports
-the last frame's `served` body and `appliedWeather`. Taking a picture sets
-`on`, `weather`, and `served` when the body is outside the volume's default
-set. This is how the volume draws over Earth. The levers go back when the
-observatory lets go.
-**On a flagged page, taking a picture with no weather turns the clouds off**
-until then, so set `engine.clouds` after `ir.preset`, not before.
-[ADR-0067](../adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md)
-records it.
+scenario's id or `'climate'`. On a wet world without an authored deck, the
+default WebGPU port draws its stock map and reports `'renderer-default'`.
+Earth keeps its textured deck. An explicit renderer link can force the volume
+over Earth. Use `?clouds=1` for the port, or `?clouds=march` for the native
+diagnostic, which reports `'drawn'` when it applies the requested regime.
+A disabled volume, WebGL or an unknown regime gives `'unavailable'`. A
+picture without weather gives `'none'` and follows the player's setting. On
+an explicit renderer link, that picture turns the volume off. Set test levers
+after `ir.preset`. Leaving the picture restores the held levers.
+`ir.clouds()` reports the last frame's `served` body and `appliedWeather`.
+[Picture weather](../adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md) · [WebGPU renderer](../adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md).
 
 **The cornerstones** are the nine pictures the weather is judged on, ids
 `weather-e1-cumulus-orbit` to `weather-g6-descent`. `ir.preset` takes them
@@ -516,8 +514,8 @@ ir.solveSun(
 ) // the first instant at or after `after`, with the sun there; null if never
 ```
 
-`scripts/weather/capture.mjs` takes every cornerstone in its arms — the volume
-under the flag, and for E1 to E3 the deck without it — and the six scripted
+`scripts/weather/capture.mjs` takes every cornerstone with the selected volume,
+adds a deck-only take (`?clouds=0`) for E1 through E3, and records the six scripted
 casts with the clouds on and off, into the main checkout's
 `.data/weather/phase-<n>/`, against a production preview it does not start:
 
@@ -736,8 +734,8 @@ resumed after the sea read the frame behind it, `defocus 0`–`3`,
 `motion tile max`, `motion neighbor max`, `motion blur`, `psf down 0`–`5`,
 `psf up 0`–`4` and `psf resolve` are the optics, `galaxy volume`,
 `galaxy rays`, `galaxy history`, `galaxy structure` and `galaxy sky` are the
-galaxy's, `canvas` is the output, and under `?clouds=1` with the clouds on,
-`scene over clouds` is the second scene pass and `cloud maps`,
+galaxy's, and `canvas` is the output. When clouds draw, `scene over clouds`
+is the second scene pass. For the native diagnostic (`?clouds=march`), `cloud maps`,
 `cloud clipmap`, `cloud volume`, `cloud sun grid`, `cloud far atlas`,
 `cloud far second`, `cloud depth`, `cloud trace` and `cloud history` are the
 passes issued inside it ([Measuring the weather](#measuring-the-weather)). Every quad pass is named where it draws,
@@ -893,9 +891,14 @@ when it bites, so raising it is the only way to see what a selection _wanted_.
 
 ## Measuring the weather
 
-The cloud system exists only under `?clouds=1`, and draws only once its lever
-is on. Without the flag there is no cloud object, pipeline, allocation or layer
-mark, and `ir.clouds()` is `null`.
+WebGPU uses the port by default. A saved off setting or `?clouds=0` disables
+the volume. Use `?clouds=1` to select the port explicitly. Its settings and
+quality presets are available through `engine.cloudTunables`. A drawn port
+frame reports its body and target bytes through `ir.clouds()`. Its settle
+flag waits for four atmosphere tables and 128 frames since the last reset.
+
+The lever examples and pass measurements below use the native diagnostic.
+Open `?clouds=march` and take a weather picture or enable the volume:
 
 ```js
 engine.clouds = { ...engine.clouds, on: true, weather: 'broken-horizon' }
@@ -906,7 +909,7 @@ await ir.cloudRadiance() // the next frame at the trace's texels: luminance and 
 ir.cloudRadianceDifference(a, b) // two captures' radiance RMSE over their cloud texels
 ```
 
-`engine.clouds` is the lever set (`render/cloudLevers.ts`). The chain reads it
+`engine.clouds` is the lever set (`render/cloudLevers.ts`). The native chain reads it
 every render call, so a change lands on the next frame, and the setter throws on
 a set with an unknown key or a value out of range. Always spread the current
 value: the guard takes a whole set.
@@ -947,7 +950,7 @@ real one and the picture is not.
 
 **`ir.settled()` waits on the clouds.** Its `clouds` is the report's own
 `settle`, null while the system is off or absent. `settle.pending` is true
-while any cache is pending or the history is under 32 frames old, the frames
+while any cache is pending. The native march also waits 32 frames, the time
 its 1/8 weight floor takes to hold eight samples a pixel. A forced path never
 settles, so cap the wait: 240 frames is longer than the far atlas's 45-frame
 cycle.

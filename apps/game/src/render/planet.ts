@@ -838,12 +838,11 @@ export interface RingMaterial {
  * strip, sampled by radius, and the mesh is 512 segments around because a ring
  * seen edge-on is a straight line and any faceting shows.
  *
- * **With a front handle it is seen through the clouds in front of it**, as an
+ * **With native front samples it is seen through the clouds in front of it**, as an
  * alpha-blended object is (`cloudFront`): its color becomes `color·T + L` and
  * its coverage stays its own. The composite has already laid the cloud's
  * light over everything behind the ring, so the blend keeps that share and
- * the ring adds only what stands in front of it. Without a handle the graph
- * is the one a page without `?clouds=1` has always compiled.
+ * the ring adds only what stands in front of it. The WebGPU port supplies no front samples.
  */
 export function createRingMaterial(front?: CloudFrontHandle): RingMaterial {
   // Opaque white, not CLEAR: the optical thickness is `opticalDepth · band.a`,

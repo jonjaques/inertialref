@@ -293,7 +293,7 @@ export function rigEngineInputs(
         : (SOL.get(address) ?? null),
     scattering: (drawn) =>
       // The rig builds a cloud system on every stance, so its air carries
-      // the sky table a page with `?clouds=1` bakes.
+      // the sky table the native diagnostic bakes.
       stance.air === true
         ? scatteringOf({ pool: () => null }, drawn, { sky: true })
         : null,
@@ -385,7 +385,7 @@ export function cloudRig(
   const looking = options.looking ?? LOOKING_UP
   const camera = new PerspectiveCamera(RIG_FOV, width / height, 0.05, 1e10)
   camera.quaternion.set(looking.x, looking.y, looking.z, looking.w)
-  // As `App.tsx`'s `onCreated` marks the camera under the flag, before any
+  // As `App.tsx`'s `onCreated` sets the camera's cloud layers, before any
   // warm-up: pass B's composite is on layer 1.
   if (options.clouds !== false) camera.layers.enable(OVER_CLOUDS_LAYER)
   camera.updateMatrixWorld()

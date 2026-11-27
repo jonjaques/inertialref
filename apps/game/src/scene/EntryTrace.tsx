@@ -61,7 +61,7 @@ export function EntryTrace({ engine }: { engine: GameEngine }) {
     Object.values(all).forEach((part, index) => {
       part.frustumCulled = false
       part.renderOrder = index + 1
-      // An instrument over the clouds under `?clouds=1`: pass B's, under A.
+      // The trace draws in the scene pass over the clouds.
       if (engine.cloudsAvailable) markOverClouds(part)
     })
     return all

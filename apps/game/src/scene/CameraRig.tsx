@@ -57,7 +57,7 @@ export function CameraRig({ engine }: { engine: GameEngine }) {
   const light = useRef<PointLight>(null)
   const ambient = useRef<AmbientLight>(null)
   const fill = useRef<DirectionalLight>(null)
-  // Under `?clouds=1` alone, set where each light is made, before any warm-up
+  // Set the layers where each light is made, before any warm-up
   // compiles against it (`cloudLayers.ts` says why every layer).
   const layers = engine.cloudsAvailable ? { layers: ALL_LAYERS } : {}
 

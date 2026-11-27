@@ -17,7 +17,7 @@ export function WarpFx({ engine }: { engine: GameEngine }) {
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
   // Same memo-without-dispose shape as SunFlare, same StrictMode reason.
-  // Over the clouds under `?clouds=1`, marked before its warm-up compiles it.
+  // Mark the effect for the over pass before warm-up compiles it.
   const fx = useMemo(() => {
     const made = createWarpEffects(() => engine.hull?.lengthMeters ?? 6)
     if (engine.cloudsAvailable) markOverClouds(made.group)

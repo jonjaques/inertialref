@@ -278,8 +278,7 @@ export interface RenderHost {
   /** The live volume, if a renderer is attached. */
   galaxyRender(): GalaxyRenderReport | null
   /**
-   * The cloud system's report: null wherever no chain built one — every host
-   * without `?clouds=1`, and every host that draws nothing.
+   * The current chain's cloud report, or null on a host without a cloud chain.
    */
   clouds(): CloudRenderReport | null
   /**

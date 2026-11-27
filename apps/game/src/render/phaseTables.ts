@@ -16,8 +16,8 @@ import {
  * gzipped, and the worker that serves the task is on every page's boot path,
  * as `atmosphereTask.ts` is on the main thread's (`atmosphereLuts.ts`
  * imports it). Imported statically there, they took the worker chunk from
- * 146 KB to 607 KB and rode in the main chunk too, on pages without
- * `?clouds=1`, which never ask the task. Reached only through `import()`,
+ * 146 KB to 607 KB and rode in the main chunk too, even on pages that
+ * never request the native diagnostic's phase tables. Reached only through `import()`,
  * they are a chunk of their own that a page fetches the first time a cloud
  * system asks for a sun's disk.
  *
