@@ -1,9 +1,9 @@
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { GameEngine } from '../engine/GameEngine.ts'
 import type { CloudsTunable } from '../render/cloudsTunables.ts'
 import { useEngine } from '../state/engineStore.ts'
+import { Action } from './Action.tsx'
 
 function parseValue(field: CloudsTunable, text: string): unknown {
   if (field.kind === 'enum') return text
@@ -93,9 +93,7 @@ export function CloudTunablesPanel({ engine }: { engine: GameEngine }) {
           />
         )}
       </label>
-      <Button type="submit" size="sm" disabled={live === undefined}>
-        Apply
-      </Button>
+      <Action type="submit" label="Apply" disabled={live === undefined} />
       <output className="type-ui" aria-live="polite">
         {status}
       </output>
