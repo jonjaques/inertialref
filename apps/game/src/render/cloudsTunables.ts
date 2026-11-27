@@ -677,6 +677,7 @@ function flat(values: object, prefix = ''): Record<string, unknown> {
 
 /** What `engine.cloudTunables` is: the port's presets and tunables, from a page. */
 export interface CloudsHandle {
+  readonly currentPreset: QualityPreset
   /** Every tunable: its path, kind, what it does and the lever of ours it answers to. */
   readonly tunables: readonly CloudsTunable[]
   /** Each quality preset's values, flat by path. */
@@ -790,6 +791,9 @@ export function createCloudsSettings(
   }
 
   const settings: CloudsSettings = {
+    get currentPreset() {
+      return preset
+    },
     tunables: CLOUDS_TUNABLES,
     cloudTypes: cloudTypePresetNames,
     presets: () =>

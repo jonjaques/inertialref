@@ -70,6 +70,7 @@ export function GraphicsPanel({
 }) {
   const [lensFlare, setLensFlare] = usePersistentState(RENDER_LENS_FLARE)
   const [clouds, setClouds] = usePersistentState(RENDER_CLOUDS)
+  const liveQuality = useEngine((snapshot) => snapshot.cloudQuality)
   const [cloudQuality, setCloudQuality] =
     usePersistentState(RENDER_CLOUD_QUALITY)
   const [gamma, setGamma] = usePersistentState(RENDER_GAMMA)
@@ -448,7 +449,7 @@ export function GraphicsPanel({
               high: 'High',
               ultra: 'Ultra',
             }}
-            value={render.cloudQualityOverride ?? cloudQuality}
+            value={liveQuality ?? render.cloudQualityOverride ?? cloudQuality}
             disabled={() =>
               webgl
                 ? 'Requires WebGPU'
@@ -456,7 +457,10 @@ export function GraphicsPanel({
                   ? 'Set by the page link'
                   : undefined
             }
-            onChange={setCloudQuality}
+            onChange={(next) => {
+              render.onCloudQuality?.(next)
+              setCloudQuality(next)
+            }}
             className="max-w-full flex-wrap"
           />
         </SettingRow>

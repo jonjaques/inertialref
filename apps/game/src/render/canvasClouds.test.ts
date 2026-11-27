@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { CloudChainFactory } from './cloudSystem.ts'
-import type { CloudsHandle } from './cloudsTunables.ts'
+import { createCloudsSettings, type CloudsHandle } from './cloudsTunables.ts'
 import { buildsClouds } from './cloudBuild.ts'
 import {
   canvasClouds,
@@ -24,7 +24,7 @@ const WEBGL = { backend: {} }
 const system = { name: 'takram' } as unknown as CloudChainFactory
 const native = { name: 'native' } as unknown as CloudChainFactory
 const handle = {
-  state: () => ({ preset: 'high' }),
+  currentPreset: 'high',
   preset: vi.fn(),
 } as unknown as CloudsHandle
 
@@ -96,6 +96,29 @@ describe('the canvas’s clouds', () => {
     await built
     expect(handle.preset).toHaveBeenLastCalledWith('medium')
   })
+
+  it.each(['reselect', 'rebuild'])(
+    'restores the display preset after author tuning on %s',
+    async (action) => {
+      const { canvas, loads } = page()
+      const settings = createCloudsSettings('high')
+      const build = canvas.withClouds(renderer(WEBGPU), SETTING_CLOUDS)
+      const first = build({})
+      loads[0]!.resolve({ factory: system, handle: settings })
+      await first
+      settings.set({ qualityPreset: 'low', coverage: 0.27 })
+      if (action === 'reselect') canvas.setQuality('high')
+      else {
+        const second = build({})
+        loads[1]!.resolve({ factory: system, handle: settings })
+        await second
+      }
+      expect(settings.state()).toMatchObject({
+        preset: 'high',
+        overrides: { coverage: 0.27 },
+      })
+    },
+  )
 
   it('lets no retired canvas publish over the canvas that replaced it', async () => {
     const { target, loads, canvas } = page()

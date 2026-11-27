@@ -49,6 +49,7 @@ it.each([
       owner: null,
       cutscene: engine.cutscene,
       cloudsAvailable: loaded,
+      cloudTunables: null,
       sensorDiagnostics: { automaticAvailable: webgpu },
     }
     try {

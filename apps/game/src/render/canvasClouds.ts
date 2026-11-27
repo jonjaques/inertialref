@@ -102,9 +102,9 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
   }
   return {
     setQuality(next: CloudQuality): void {
-      if (quality === next) return
       quality = next
-      preferences?.preset(next)
+      if (preferences && preferences.currentPreset !== next)
+        preferences.preset(next)
     },
     /**
      * The renderer factory, resolving the cloud system's chunk beside the
@@ -155,12 +155,8 @@ export function canvasClouds(target: CloudsTarget, loaders: CloudsLoaders) {
           const adapter =
             result !== null && 'adapter' in result ? result.adapter : null
           if (optional && adapter !== null) {
-            if (
-              preferences !== adapter.handle &&
-              adapter.handle.state().preset !== quality
-            ) {
+            if (adapter.handle.currentPreset !== quality)
               adapter.handle.preset(quality)
-            }
             preferences = adapter.handle
           }
           publish(adapter?.factory ?? null, adapter?.handle ?? null)

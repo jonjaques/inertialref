@@ -638,6 +638,7 @@ export default function App({ catalog }: { catalog: StarCatalog }) {
     pictureOverride,
     cloudsLinked,
     cloudsEnabled: clouds !== null,
+    onCloudQuality: cloudsCanvas.setQuality,
     ...(cloudsRequested?.kind === 'port'
       ? { cloudQualityOverride: cloudsRequested.preset }
       : {}),
