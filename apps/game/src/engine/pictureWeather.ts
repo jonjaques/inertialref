@@ -141,17 +141,8 @@ export function servedOutcome(
 export class PictureWeatherHold {
   #found: Held | null = null
   #outcome: PictureWeatherOutcome = 'none'
-  /**
-   * Weather asked for before the page's clouds arrived. `?clouds=1`'s chunk
-   * resolves beside the renderer, and a picture in the address bar is taken
-   * when the planetarium mounts, which can be first; without this the
-   * picture would hold its weather unavailable on a page that has it a few
-   * frames later.
-   */
-  #early: {
-    readonly weather: PictureWeather
-    readonly address: string
-  } | null = null
+  // A saved picture can arrive before the renderer, the body's system, or both.
+  #waiting: 'renderer' | 'body' | null = null
   /**
    * The observatory's subject the picture stood on, read on the first frame
    * after it was taken, since the picture sets its weather before it moves
@@ -160,13 +151,6 @@ export class PictureWeatherHold {
    * target, and the forced body must not follow the camera elsewhere.
    */
   #subject: string | null | undefined = undefined
-  /**
-   * A picture's body by address while its system is not loaded yet.
-   * `bodyFor` answers null for a system nothing has loaded, which forces the
-   * address; once it loads, the served set decides as it would have, so two
-   * takes of one picture end on one set of levers whichever came first.
-   */
-  #pending: string | null = null
   /** The body the picture's clouds are asked to serve, while they are on. */
   #address: string | null = null
   /** The held picture's weather and body, to take it again under a new default. */
@@ -218,27 +202,35 @@ export class PictureWeatherHold {
       weather: levers.weather,
       served: levers.served,
     }
-    const body = engine.bodyFor(address)
+    this.#taken = { weather, address }
+    this.#subject = undefined
+    return this.#resolve(engine, weather, address, engine.bodyFor(address))
+  }
+
+  #resolve(
+    engine: PictureWeatherEngine,
+    weather: PictureWeather | null,
+    address: string,
+    body: Body | null,
+  ): PictureWeatherOutcome {
     const renderer = engine.cloudSystemFactory
-    const next = pictureWeatherLevers(levers, weather, {
-      available:
-        renderer !== null &&
-        (engine.sensorDiagnostics?.clouds?.available ?? true),
+    const available =
+      renderer !== null && (engine.sensorDiagnostics?.clouds?.available ?? true)
+    const next = pictureWeatherLevers(engine.clouds, weather, {
+      available,
       appliesWeather: renderer?.appliesWeather === true,
       served: body !== null && cloudsServed(body),
       address,
       byDefault: this.#byDefault,
     })
     engine.clouds = next.levers
-    this.#taken = { weather, address }
     this.#outcome = next.outcome
-    this.#subject = undefined
     this.#address = weather !== null && next.levers.on ? address : null
-    this.#pending = body === null ? this.#address : null
-    this.#early =
-      weather !== null && next.outcome === 'unavailable' && renderer === null
-        ? { weather, address }
-        : null
+    this.#waiting = null
+    if (weather !== null && weatherOf(weather.regime) !== null) {
+      if (renderer === null) this.#waiting = 'renderer'
+      else if (available && body === null) this.#waiting = 'body'
+    }
     return next.outcome
   }
 
@@ -249,9 +241,8 @@ export class PictureWeatherHold {
     this.#found = null
     this.#taken = null
     this.#outcome = 'none'
-    this.#early = null
+    this.#waiting = null
     this.#subject = undefined
-    this.#pending = null
     this.#address = null
   }
 
@@ -265,11 +256,8 @@ export class PictureWeatherHold {
    */
   frame(engine: PictureWeatherEngine, observing: boolean): void {
     if (!observing) return this.release(engine)
-    if (this.#early !== null && engine.cloudSystemFactory !== null) {
-      this.apply(engine, this.#early.weather, this.#early.address)
-      return
-    }
-    if (this.#found === null) return
+    const taken = this.#taken
+    if (taken === null) return
     const subject = engine.harness.observatory.target?.address ?? null
     if (this.#subject === undefined) this.#subject = subject
     else if (subject !== this.#subject) return this.release(engine)
@@ -280,12 +268,12 @@ export class PictureWeatherHold {
           engine.clouds,
           this.#address,
         ) ?? this.#outcome
-    if (this.#pending === null) return
-    const body = engine.bodyFor(this.#pending)
-    if (body === null) return
-    const served = cloudsServed(body) ? null : this.#pending
-    if (engine.clouds.served !== served)
-      engine.clouds = { ...engine.clouds, served }
-    this.#pending = null
+    if (this.#waiting !== null) {
+      if (this.#waiting === 'renderer' && engine.cloudSystemFactory === null)
+        return
+      const body = engine.bodyFor(taken.address)
+      if (this.#waiting === 'body' && body === null) return
+      this.#resolve(engine, taken.weather, taken.address, body)
+    }
   }
 }
