@@ -1,32 +1,24 @@
 # The weather: where the work stands
 
-The working notes behind [the weather plan](../the-weather.md), and the guide
-to picking it up. The plan says what the weather is for. This directory says
-how far it has got, what each phase handed the next, and where the evidence
-is.
+The default WebGPU volume uses takram's renderer through `three-clouds-webgpu`.
+It draws stock weather on wet worlds without an authored deck. Earth keeps its
+textured deck on ordinary visits. The native diagnostic at `?clouds=march`
+draws the weather field and exposes its light and depth instruments.
+[The weather](../the-weather.md) · [Cloud renderer](../../../docs/adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md)
 
-The native cloud work reached `main` through #211 on 17 Nov 2026 (US
-Central). Phase 0 established the frame and scene unit. Phase 1 supplied
-the weather field, the measuring instruments and the diagnostic march.
-#209 merged into `the-weather` before #211 merged that integration branch.
-The branch has since been deleted. [Phase 1](https://github.com/jonjaques/inertialref/pull/209) · [Integration](https://github.com/jonjaques/inertialref/pull/211)
-
-The default WebGPU volume now uses takram's renderer through
-`three-clouds-webgpu`. The native diagnostic is available at `?clouds=march`.
-Earth keeps its textured deck on ordinary visits. The next cloud phases
-cover the served body's air, surface shadows, weather maps, orbit and the
-transparent foreground. Their reference images are the six generated-world
-cornerstones captured with the port. The capture ledger records the original
-PNG hashes, the served body and the cloud mask for each. Pass it to the weather
-capture's `--base` option to compare against phase C's hosted plates.
-[Phase C capture ledger](phase1/measurements/clouds-c-2026-11-26.json). [Cloud renderer](../../../docs/adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md) · [Open phases](../the-clouds.md)
+Six generated-world plates are the reference for the served body's air,
+surface shadows, weather maps, orbit and the transparent foreground. The
+phase C ledger identifies each PNG by hash and records the served body and
+cloud mask. Pass it to the weather capture's `--base` option to compare a
+new plate with the same view.
+[Phase C capture ledger](phase1/measurements/clouds-c-2026-11-26.json) · [Open phases](../the-clouds.md)
 
 ## The native reference
 
-These measurements describe the native march at the commits named below.
-Its cornerstones, capture tools, instruments, motion row and weather levers
-also serve the port. Work on native reference transport, phase tables,
-higher orders and irradiance tables has stopped.
+The measurements below describe the native march at the commits named in
+each table. Both renderers use the cornerstones, capture tools, motion row
+and weather levers. The reference transport, phase tables, higher orders
+and irradiance tables belong to the native diagnostic.
 
 ## What phase 0 decided
 
