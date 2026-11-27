@@ -24,6 +24,7 @@ const status = (tick: number): HarnessStatus =>
 
 /** The rest of the port, at rest. Overridden per test where it is the subject. */
 const idle = {
+  cloudTunables: null,
   cloudsAvailable: false,
   sensorDiagnostics: null,
   showShip: true,
@@ -39,6 +40,7 @@ const idle = {
 }
 
 const EMPTY: EngineSnapshot = {
+  cloudQuality: null,
   character: null,
   status: null,
   exposure: null,

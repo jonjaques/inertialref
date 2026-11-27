@@ -118,7 +118,7 @@ import type {
   CloudChainFactory,
   CloudFrontHandle,
 } from '../render/cloudSystem.ts'
-// Types only: the takram port is its own chunk, loaded under `?clouds=takram`.
+// Types only: the WebGPU port loads when the canvas selects it.
 import type { CloudsHandle } from '../render/cloudsTunables.ts'
 import { PictureWeatherHold } from './pictureWeather.ts'
 import type { LoadedShip } from '../render/shipModels.ts'
@@ -508,7 +508,7 @@ export class GameEngine {
    * copy, because a field written in place skips that check, and the frame
    * compares its levers against the last frame's, which would be the same
    * object: a weather changed that way keeps the old one's history. Inert
-   * without `?clouds=1`, which builds no system to read them.
+   * on a clouds-off page, which builds no system to read them.
    */
   #clouds: CloudLevers = DEFAULT_CLOUD_LEVERS
 
@@ -525,8 +525,8 @@ export class GameEngine {
   #cloudFront: CloudFrontHandle | null = null
 
   /**
-   * `?clouds=1`'s chunk, or `?clouds=takram`'s, resolved in the canvas's
-   * renderer factory; null without the flag. What comes back builds a system
+   * `?clouds=march`'s chunk, or the port's, resolved in the canvas's
+   * renderer factory. Null when the canvas has no cloud renderer. What comes back builds a system
    * that writes this engine's front handle, so every chain the sensor builds
    * feeds the one handle the scene's materials hold.
    */
@@ -551,9 +551,9 @@ export class GameEngine {
   }
 
   /**
-   * `?clouds=takram`'s presets and tunables, which a script writes as
+   * The WebGPU port's presets and tunables, which a script writes as
    * `engine.cloudTunables.preset('ultra')` and
-   * `engine.cloudTunables.set({ coverage: 0.4 })`; null on every other page.
+   * `engine.cloudTunables.set({ coverage: 0.4 })`. Null when the canvas has no port.
    * The levers above still switch the clouds on
    * and name the body they are served on.
    */
@@ -565,8 +565,8 @@ export class GameEngine {
   /**
    * What a material drawn after the composite reads the clouds in front of
    * it through: this frame's trace textures and the numbers beside them.
-   * One for the page, made when the cloud chunk loads; null without the
-   * flag, where such a material builds the graph it builds with no clouds.
+   * The canvas creates one handle per cloud factory. The port supplies an
+   * empty handle, and a canvas without a factory leaves this null.
    */
   get cloudFront(): CloudFrontHandle | null {
     return this.#cloudFront

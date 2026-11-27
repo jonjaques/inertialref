@@ -9,8 +9,8 @@ import { CLOUD_MAX_STEPS_COUNTED } from './cloudKinds.ts'
  * that change what the history means are named by `cloudResetKey`, and the
  * ones that change the field by `cloudFieldKey`.
  *
- * Off by default, and nothing exists without `?clouds=1` at all: a lever is
- * presentation, never a canonical value.
+ * The initial levers are idle. The display preference turns on the default
+ * WebGPU port. Both renderers read these presentation controls.
  *
  * A lever is one of three kinds. A quality step is a setting a player's
  * machine could be given. A measurement control steers a campaign and ships

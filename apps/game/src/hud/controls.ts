@@ -333,6 +333,11 @@ export interface HudRenderState {
   readonly pictureOverride?: Picture | null
   /** A link's `?clouds=` chose this page's clouds, and the setting waits for the next page. */
   readonly cloudsLinked?: boolean
+  readonly cloudsEnabled?: boolean
+  readonly onCloudQuality?: (
+    quality: import('../render/cloudQuality.ts').CloudQuality,
+  ) => void
+  readonly cloudQualityOverride?: import('../render/cloudQuality.ts').CloudQuality
   /**
    * Ask for a specific state, not the next one.
    *

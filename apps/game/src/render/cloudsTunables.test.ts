@@ -46,13 +46,24 @@ describe('the clouds settings', () => {
     const successor = built()
     settings.attach(successor.context, frame)
     settings.flush(drawing.context)
-    expect(successor.context.qualityPreset).toBe('high')
-    expect(successor.context.clouds.accurateSunSkyLight).toBe(true)
-    expect(successor.context.graphVersion).toBe(0)
+    expect(successor.context.qualityPreset).toBe('low')
+    expect(successor.context.clouds.accurateSunSkyLight).toBe(false)
 
     settings.flush(successor.context)
     expect(successor.context.qualityPreset).toBe('low')
     expect(successor.context.clouds.accurateSunSkyLight).toBe(false)
+  })
+
+  it('fits every preset’s shadow cascades to the cloud range at boot and after a round trip', () => {
+    const settings = createCloudsSettings('low')
+    const { context } = built()
+    settings.attach(context, frame)
+    expect(context.shadow.maxFar).toBe(200_000)
+    for (const preset of ['high', 'lowEnd', 'low'] as const) {
+      settings.preset(preset)
+      settings.flush(context)
+      expect(context.shadow.maxFar).toBe(200_000)
+    }
   })
 
   it('reach every context followed, and none that is not', () => {
@@ -161,7 +172,8 @@ describe('the clouds settings', () => {
 
     const { context } = built()
     settings.attach(context, frame)
-    expect(context.qualityPreset).toBe('high')
+    expect(context.qualityPreset).toBe('medium')
+    expect(context.powderScale).toBe(0.2)
     settings.flush(context)
     expect(context.qualityPreset).toBe('medium')
     expect(context.coverage).toBe(reference.coverage)

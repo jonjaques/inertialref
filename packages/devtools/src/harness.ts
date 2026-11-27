@@ -772,8 +772,7 @@ export class GameHarness {
   } {
     const galaxy = this.#host.render.galaxyRender()
     const terrain = this.#host.render.terrain()
-    // Null with the system off or absent, so a page without `?clouds=1`
-    // settles as it does with no clouds at all; a forced path never does.
+    // A system that draws nothing contributes no wait. A forced march never settles.
     const clouds = this.#host.render.clouds()?.settle ?? null
     const sky =
       galaxy === null || galaxy.cache === undefined
@@ -1620,14 +1619,14 @@ export class GameHarness {
     return this.#host.render.terrain()
   }
 
-  /** The cloud system's report, or null: no `?clouds=1`, or nothing drawing. */
+  /** The current chain's cloud report, or null when it has no cloud system. */
   clouds(): CloudRenderReport | null {
     return this.#host.render.clouds()
   }
 
   /**
    * The next frame's radiance at the trace's texels and which of them hold
-   * cloud, or null: no `?clouds=1`, or nothing drawing.
+   * cloud. A frame without a drawn volume returns null.
    */
   cloudRadiance(): Promise<CloudRadiance | null> {
     return this.#host.render.cloudRadiance()

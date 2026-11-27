@@ -1,5 +1,5 @@
 /*
- * The modules no page loads until `?clouds=1` asks for them, named once for
+ * The modules kept behind the canvas's renderer selection, named once for
  * the two checks that hold it: `check-chunks.mjs` in the gate, over an
  * in-memory build of `App.tsx`, and `check-site-chunks.mjs` in the bundle
  * stage, over the site Astro wrote.
@@ -17,7 +17,7 @@ export const CLOUD_MODULES = [
   'apps/game/src/render/cloudSystem.ts',
   'apps/game/src/render/cloudTrace.ts',
   'apps/game/src/render/cloudMarch.ts',
-  // `?clouds=takram`'s: the port and takram's atmosphere load behind them.
+  // The default WebGPU volume loads the port and its atmosphere behind these.
   // The tunables import the port too, and are the one of the two the engine
   // names, for a type: kept as a value, that edge is the port on every page.
   'apps/game/src/render/clouds.ts',

@@ -803,7 +803,8 @@ it, and a lock that cannot be written refuses the job.
 ### Rule 69
 
 **Never draw an object over the clouds without marking it for the OVER
-layer.** With `?clouds=1` and the clouds on, the scene is drawn in two passes:
+layer.** Both the default WebGPU port and the native diagnostic
+(`?clouds=march`) draw a cloud frame in two scene passes:
 camera layer 0, everything a cloud can stand in front of, and then layer 1
 over the composite, loaded onto the same target
 (`render/cloudOverPass.ts`). A ring, a plume, a trace, the flare or any other
@@ -812,7 +813,7 @@ then veils it with cloud that is behind it. `markOverClouds` in
 `render/cloudLayers.ts` sets the layer on an object and every descendant, a
 `Group` included: three sets no order for the children of a group that fails
 the layer test, so marking only the meshes reorders them within the pass. The
-marks exist only under the flag, where `engine.cloudsAvailable` is true, and
+marks follow `engine.cloudsAvailable` at construction, and
 two masks go with them. The camera tests layer 1 from its creation, in
 `<Canvas onCreated>`, because `compileAsync` drops an object whose layers the
 camera's do not test: a mask the camera learns of in a frame callback leaves
@@ -820,8 +821,7 @@ every boot warm-up compiling nothing on a marked object, and its pipelines
 build on its first drawn frame. The lights test every layer, because three
 keeps a light in a render's set only when its layers pass the camera's: with a
 light on layer 0 alone the second pass is dark, and every overlay builds a
-second, unlit pipeline on its first frame there. Without the flag there is no
-second pass, so a mark buys nothing and risks the same trap, and none is
-applied. Marking the other way is the same defect reversed: an object on layer
+second, unlit pipeline on its first frame there. Marking the other way is the
+same defect reversed: an object on layer
 1 that a cloud should stand in front of is drawn over it.
 [ADR-0063](../adr/0063-the-weather-draws-between-a-scene-pass-under-the-clouds-and-one-over-them.md).

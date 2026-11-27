@@ -197,8 +197,8 @@ Steps run in the order they are written, in one browser session:
                      too long or too quote-heavy for a shell argument
   --wait <ms>        a fixed pause. Textures stream in asynchronously after a seek
   --settle <ms>      wait until ir.settled() says the sky and the ground have
-                     stopped arriving, and under ?clouds=1 the clouds' caches
-                     and their history's 32 frames, for at most <ms>; reports
+                     stopped arriving and any drawn clouds have settled (128
+                     frames on the port, 32 on the march), for at most <ms>; reports
                      what was still pending if it ran out. What a plate waits
                      for. A forced cloud path never settles
   --shot <path>      screenshot. A bare filename lands in .data/drive/;

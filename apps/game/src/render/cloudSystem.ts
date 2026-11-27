@@ -44,7 +44,7 @@ import type { SceneLayout } from './sceneLayout.ts'
 /*
  * The cloud system: owns every cloud resource, builds the frame's state
  * inside `sensor.render()`, runs the frame's passes in §4.2's order through
- * the composite's frame node, and reports. Built only under `?clouds=1`, and
+ * the composite's frame node, and reports. Built only under `?clouds=march`, and
  * only on WebGPU; with its levers off it draws nothing and adds no pass.
  *
  * It orchestrates and holds no shader code. The field and every node set
@@ -178,7 +178,7 @@ export interface CloudSystemFactory extends CloudChainFactory {
 /**
  * What the sensor's chain asks of whichever renderer draws the clouds: the
  * system less the instruments' subjects, which are the native march's own.
- * `?clouds=takram`'s system (`clouds.ts`) is one of these and no more.
+ * The default port implements this interface in `clouds.ts`.
  */
 export type CloudChainSystem = Omit<CloudSystem, 'resources' | 'field'>
 
@@ -301,7 +301,16 @@ function buildCloudSystem(deps: CloudSystemDeps): CloudSystem {
   })
   const traceOutputs = (): CloudTraceTextures => trace.outputs
   const history = new CloudHistory(uniforms, () => trace.outputs)
-  const radiance = new CloudRadianceMeter(uniforms, () => history.outputs)
+  const radiance = new CloudRadianceMeter(
+    () => ({
+      width: uniforms.trace.size.value.x,
+      height: uniforms.trace.size.value.y,
+      historyWidth: uniforms.trace.history.value.x,
+      historyHeight: uniforms.trace.history.value.y,
+      light: history.outputs.light,
+    }),
+    'transmittance',
+  )
   /** What the system holds past the field's bakes: the field disposes its own. */
   const own = [depth, trace, history] as const
   const resources: readonly CloudResource[] = [...field.bakes, ...own]

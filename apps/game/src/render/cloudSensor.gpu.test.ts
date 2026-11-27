@@ -20,10 +20,9 @@ import { sceneBackend, sceneLayout } from './sceneLayout.ts'
 import { warmCompile, warmRenderer } from './warmup.ts'
 
 /*
- * Off by default, at the sensor (§4.7). Without the flag the chain holds
- * nothing of the clouds: no system, no report, no object in the scene, no
- * layer on the camera. With it and the levers off, a frame is the frame
- * without it —
+ * With clouds disabled, the chain has no cloud system, report, scene object
+ * or camera layer. With the native diagnostic installed and its levers off,
+ * a frame matches the bare chain —
  * the pixels bit for bit, the draw calls, the passes on the timeline — and
  * the post program carries one more `+ 0` term and not one more binding.
  * With the levers on, the scene is drawn in two passes, under the clouds and
@@ -64,7 +63,7 @@ const bits = (data: Float32Array | Uint8Array): Uint32Array =>
 const bindings = (wgsl: string): number =>
   [...wgsl.matchAll(/var\s+\w+\s*:\s*texture_\w+/g)].length
 
-describe('without the flag', () => {
+describe('without a cloud factory', () => {
   it('builds nothing of the clouds: no system, no report, no object, no layer', () => {
     expect(bare.system).toBeNull()
     expect(bare.sensor.clouds).toBeNull()
@@ -76,7 +75,7 @@ describe('without the flag', () => {
   })
 })
 
-describe('with the flag and the levers off', () => {
+describe('with the native diagnostic and the levers off', () => {
   it('reports a system that exists and is off, its mesh hidden', () => {
     const report = flagged.sensor.diagnostics.clouds!
     expect(report.available).toBe(true)
@@ -89,7 +88,7 @@ describe('with the flag and the levers off', () => {
     expect(meshes[0]!.visible).toBe(false)
   })
 
-  it('draws the frame without the flag: the pixels bit for bit, the renders and the draws', async () => {
+  it('matches the bare chain in pixels, render count and draw count', async () => {
     // `info.render.drawCalls` is reset by three's own frame loop alone,
     // which the harness stubs, so its difference over a frame is the
     // frame's draws; `info.calls` counts renders, the pass and the quad.

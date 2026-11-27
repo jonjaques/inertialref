@@ -44,7 +44,7 @@ export function Sensor({
   const gl = useThree((state) => state.gl)
   const scene = useThree((state) => state.scene)
   const camera = useThree((state) => state.camera)
-  // `?clouds=1`'s chunk, resolved before R3F mounts anything (`App.tsx`). A
+  // The selected cloud chunk resolves before R3F mounts anything (`App.tsx`). A
   // dependency of the chain, so a factory that arrived late would rebuild it.
   const clouds = engine.cloudSystemFactory
   // One per mount. Its hooks close over the first render's engine, which is

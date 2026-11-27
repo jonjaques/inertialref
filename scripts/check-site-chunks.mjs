@@ -1,7 +1,6 @@
 #!/usr/bin/env node
 /*
- * No page of the built site loads the cloud system before `?clouds=1` asks
- * for it, and the game's page loads the number of chunks it is meant to.
+ * Every page keeps both cloud renderers outside its static imports, and the game's page loads the number of chunks it is meant to.
  *
  * This reads what Astro wrote, because nothing short of the site holds it.
  * `check-chunks.mjs` builds `App` alone in the gate; Astro builds every
@@ -148,6 +147,6 @@ if (problems.length > 0) {
   process.exit(1)
 }
 console.log(
-  `site chunks: ${pages} pages load none of the ${CLOUD_MODULES.length} cloud modules before ?clouds=1, ` +
+  `site chunks: ${pages} pages load none of the ${CLOUD_MODULES.length} cloud modules through static imports, ` +
     `and index.html loads ${gamePage.size} chunks (${chunks.size} scripts, ${unmapped} without a map)`,
 )

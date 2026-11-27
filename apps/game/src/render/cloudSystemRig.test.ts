@@ -10,7 +10,7 @@ describe('the cloud rig’s air', () => {
       levers,
     )
     const body = withAir.scene.bodies.find((one) => one.address === RIG_EARTH)!
-    // The rig has no engine holding `?clouds=1`'s factory to say the sky is
+    // The rig has no engine holding the march's factory to say the sky is
     // wanted, so it asks for it: its systems' GPU tests bind a real table.
     expect(withAir.scattering(body)?.sky).toBeDefined()
     const without = rigEngineInputs({ eye: 1500, looking: LOOKING_UP }, levers)

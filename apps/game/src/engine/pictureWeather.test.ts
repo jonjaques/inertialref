@@ -85,11 +85,10 @@ function engine(
     },
     cloudSystemFactory: available ? { appliesWeather } : null,
     sensorDiagnostics,
-    // The deckless body's system loads when the test says so; Earth's is
-    // loaded from the start.
     bodyFor(address) {
+      if (!this.loaded) return null
       if (address === EARTH) return earth
-      return address === decklessAddress && this.loaded ? deckless : null
+      return address === decklessAddress ? deckless : null
     },
   }
 }
@@ -115,6 +114,23 @@ describe('a picture’s weather as levers', () => {
     served: false,
     address: EARTH,
   }
+
+  it('keeps an authored deck when the default port cannot serve the requested weather', () => {
+    const result = pictureWeatherLevers(
+      DEFAULT_CLOUD_LEVERS,
+      { regime: 'overcast' },
+      {
+        available: true,
+        appliesWeather: false,
+        served: false,
+        address: EARTH,
+        byDefault: true,
+      },
+    )
+    expect(result.levers.on).toBe(false)
+    expect(result.levers.served).toBeNull()
+    expect(result.outcome).toBe('unavailable')
+  })
 
   it('draws a known regime, and forces a body outside the served set by its address', () => {
     const { levers, outcome } = pictureWeatherLevers(
@@ -212,6 +228,33 @@ describe('a picture’s weather as levers', () => {
 })
 
 describe('the hold', () => {
+  it.each([true, false])(
+    'decides a saved picture when its body loads (port ready: %s)',
+    (ready) => {
+      for (const [address, draws] of [
+        [decklessAddress, true],
+        [EARTH, false],
+      ] as const) {
+        const page = engine(ready, null, false)
+        page.loaded = false
+        const hold = new PictureWeatherHold()
+        hold.setDefault(page, true)
+        hold.apply(page, { regime: 'overcast' }, address)
+        page.aim(address)
+        if (!ready)
+          Object.assign(page, { cloudSystemFactory: { appliesWeather: false } })
+        hold.frame(page, true)
+        expect(page.clouds).toMatchObject({ on: false, served: null })
+        page.loaded = true
+        hold.frame(page, true)
+        expect(page.clouds).toMatchObject({ on: draws, served: null })
+        expect(hold.outcome).toBe(draws ? 'renderer-default' : 'unavailable')
+        hold.frame(page, false)
+        expect(page.clouds).toEqual({ ...DEFAULT_CLOUD_LEVERS, on: true })
+      }
+    },
+  )
+
   it.each(['fair-cumulus', 'climate'])(
     'takes %s on the port with the volume on and the renderer’s weather',
     (regime) => {

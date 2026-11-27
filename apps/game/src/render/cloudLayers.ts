@@ -6,8 +6,8 @@ import { Layers, type Material, type Object3D } from 'three/webgpu'
  * on layer 1, and everything under them on layer 0, so a second scene pass
  * can draw the first half's complement over the composite.
  *
- * Nothing is marked without `?clouds=1`, and the camera tests layer 1 from
- * its creation whenever anything is. `compileAsync` drops an object whose
+ * When a cloud factory is available, the scene marks its overlays and the
+ * camera tests layer 1 from its creation. `compileAsync` drops an object whose
  * layers the camera's do not test (`Renderer.js:3081–3087`), so a mark the
  * camera learns of later leaves every boot warm-up compiling nothing on the
  * marked object, and its pipelines build on its first drawn frame.

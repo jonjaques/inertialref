@@ -408,7 +408,7 @@ describe('the front handle', () => {
       now: () => 0,
     })
     try {
-      // Without the flag the chunk never loads: no factory, and no handle.
+      // The canvas has yet to publish a cloud factory.
       expect(engine.cloudFront).toBeNull()
       expect(engine.cloudsAvailable).toBe(false)
       const built: (CloudSystemDeps['front'] | undefined)[] = []

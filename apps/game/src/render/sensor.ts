@@ -50,7 +50,7 @@ import { SensorHistory } from './sensorHistory.ts'
 import { ENHANCED_SKY_GAIN, ENHANCED_SKY_CEILING } from './enhancedSky.ts'
 import { namePass } from './passTimeline.ts'
 import { type CloudRenderReport, cloudReportIdle } from '@inertialref/devtools'
-// Types only: the cloud system is its own chunk, loaded under `?clouds=1`.
+// Types only: each renderer loads its own cloud chunk.
 import type {
   CloudChainFactory,
   CloudChainSystem,
@@ -79,8 +79,8 @@ export interface SensorDiagnostics {
   readonly motionPasses: number
   readonly shutterFraction: number
   /**
-   * The cloud system's report, read when asked: null without `?clouds=1`,
-   * and `{ available: false, reason: 'webgl' }` with it on WebGL.
+   * The cloud report is null without a factory. A factory on WebGL reports
+   * `{ available: false, reason: 'webgl' }`.
    */
   readonly clouds: CloudRenderReport | null
   /**
@@ -92,7 +92,7 @@ export interface SensorDiagnostics {
 }
 
 export interface SensorOptions {
-  /** `?clouds=1`'s chunk, or `?clouds=takram`'s: the chain builds the cloud system on WebGPU. */
+  /** `?clouds=march`'s chunk, or the port's: the chain builds the cloud system on WebGPU. */
   readonly clouds?: CloudChainFactory
 }
 
@@ -145,7 +145,7 @@ export interface SensorFrame {
   readonly gamma?: number
   readonly motionBlur?: boolean
   readonly noiseTick?: number
-  /** The engine's half of the clouds' inputs, under `?clouds=1`; null otherwise. */
+  /** The engine's inputs when a cloud system is available. */
   readonly clouds?: CloudEngineInputs | null
 }
 
@@ -219,7 +219,7 @@ export function createSensor(
   /*
    * After the pass's MRT, which pass B draws with. Nothing at all without
    * the option: no object, pipeline or term in the post program, so a
-   * chain built without `?clouds=1` holds nothing of the clouds.
+   * chain built without a cloud factory holds nothing of the clouds.
    */
   const clouds =
     options.clouds === undefined || !automaticAvailable

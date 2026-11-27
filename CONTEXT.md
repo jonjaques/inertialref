@@ -13939,6 +13939,49 @@ where a dot every four pixels cannot show, so the grain is judged on a
 2880 × 1800 still taken mid-turn at 1:1: no grid of dots, and a few isolated
 bright texels in clear sky.
 
+## The cloud layer is an input to the composite program (26 Nov 2026)
+
+A genuinely cold low preset on three r187 failed with
+`Member "bottomRadius" not found in struct "AtmosphereParameters"`.
+The 25 Nov run built high and applied low on a later frame. Registering
+the parameter structure in each shader stage that builds it fixes the
+cold path. A fresh renderer per preset now exercises all five on Metal.
+
+The second failure looked like a performance improvement. High reached
+from low cost 10.04 ms against 14.38 ms from boot. The TSL callback
+captured the cloud layer, so three could reuse the first preset's program.
+Passing the layer as a function input made the material's key change with
+the graph. The following figures are whole-frame milliseconds at G1 on the
+M6 mini, Chrome 158 WebGPU, SDR, production assets. Each row keeps the
+least of three `ir.gpu(135)` reads. The 1080p switch and return each had
+60 page frames to settle. Thermal pressure read zero before and after.
+
+| Preset  | Cold 1920 × 1080 | After round trip | Cold 2880 × 1800 |
+| ------- | ---------------: | ---------------: | ---------------: |
+| Off     |             5.03 |                — |            11.63 |
+| Minimum |             7.42 |             7.51 |            17.15 |
+| Low     |             8.80 |             8.88 |            17.83 |
+| Medium  |            12.50 |            12.57 |            25.03 |
+| High    |            14.46 |            14.58 |            25.84 |
+| Ultra   |            17.98 |            18.13 |            32.25 |
+
+High went through low. The other four went through high. At high the two
+casting layers turned off together took the frame from 14.42 to 13.62 ms
+and back to 14.49 when restored. The port's graph version advanced on
+both writes. At the same preset, depth, march, resolve, history and
+shadow targets totaled 102,925,824 bytes at 1080p and 219,565,824 bytes
+at 2880 × 1800. These figures exclude lookup tables, downloaded noise and
+driver allocation overhead. The 175 tunables and five quality presets
+remain available to the author. [ADR-0076](docs/adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md)
+
+At 2880 × 1800, G1's cloud history was ready 13.37 s after navigation.
+The cover lifted at 20.67 s. G3 settled at 14.02 s and reached first light at
+22.76 s. In the first six takes, G1, G3 and G5 photographed the cover even
+though their body, history and luminance were correct. The weather capture
+waits for `ir.status().boot` to reach `booted` before settling, and checks
+the phase again on the read kept with the plate. All six replacement PNGs
+show the scene on production build `377787ae`. [Capture ledger](design/plans/weather/phase1/measurements/clouds-c-2026-11-26.json)
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

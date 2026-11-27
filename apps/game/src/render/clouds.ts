@@ -7,30 +7,21 @@ import {
   cloudsSettled,
 } from '@inertialref/devtools'
 import {
-  AddEquation,
   Color,
-  CustomBlending,
   type Layers,
   Matrix4,
   Mesh,
-  MeshBasicNodeMaterial,
   Node,
   type NodeFrame,
   NodeUpdateType,
-  OneFactor,
-  OneMinusSrcAlphaFactor,
   PlaneGeometry,
   Scene,
   Vector2,
   Vector3,
   type WebGPURenderer,
-  ZeroFactor,
 } from 'three/webgpu'
 import {
   context as tslContext,
-  Fn,
-  mrt,
-  output,
   positionGeometry,
   uniform,
   vec4,
@@ -60,9 +51,11 @@ import type {
   CloudFrontHandle,
   CloudSystemDeps,
 } from './cloudSystem.ts'
-import { sensorRadiance } from './radiance.ts'
+import { cloudsMaterial } from './cloudsMaterial.ts'
+import { cloudsTargetBytes } from './cloudsTargets.ts'
 import { sceneFarDepth } from './sceneDepth.ts'
 import { createCloudsAtmosphere } from './cloudsAtmosphere.ts'
+import { CloudRadianceMeter } from './cloudRadiance.ts'
 import { CloudsDepth } from './cloudsDepth.ts'
 import {
   CLOUDS_ANCHOR_REACH,
@@ -80,9 +73,8 @@ import {
 import { warmCompile, warmRenderer } from './warmup.ts'
 
 /*
- * `?clouds=takram`: takram's volumetric clouds, through the unofficial
- * WebGPU port `three-clouds-webgpu` as it ships, in the place the native
- * cloud system stands.
+ * The default WebGPU volume uses John Fewell's port of takram's clouds,
+ * `three-clouds-webgpu`. A link can select the same port with `?clouds=1`.
  *
  * The port is used whole and unmodified. Its pass marches the clouds, lights
  * them from takram's own atmosphere and resolves them into its own targets;
@@ -152,22 +144,6 @@ function sceneUnitsPerLuminance(atmosphere: AtmosphereContext): number {
     .multiplyScalar(luminanceScale)
     .dot(LUMINANCE)
   return Math.PI / illuminance
-}
-
-/*
- * The native composite's blend (`compositeOver`, `cloudComposite.ts`),
- * written again because that module is the native system's and this chunk
- * loads none of it: premultiplied over, (One, OneMinusSrcAlpha), and alpha
- * left as the scene wrote it.
- */
-function compositeOver(material: MeshBasicNodeMaterial): void {
-  material.blending = CustomBlending
-  material.blendEquation = AddEquation
-  material.blendSrc = OneFactor
-  material.blendDst = OneMinusSrcAlphaFactor
-  material.blendEquationAlpha = AddEquation
-  material.blendSrcAlpha = ZeroFactor
-  material.blendDstAlpha = OneFactor
 }
 
 /**
@@ -292,6 +268,16 @@ function build(
    * once and composite forty times, and time the quad.
    */
   pass.updateBeforeType = NodeUpdateType.RENDER
+  const radianceMeter = new CloudRadianceMeter(() => {
+    const target = pass.historyRT ?? pass.layerRT
+    return {
+      width: pass.layerRT.width,
+      height: pass.layerRT.height,
+      historyWidth: target.width,
+      historyHeight: target.height,
+      light: target.texture,
+    }
+  }, 'opacity')
   const context = pass.cloudsContext
   Object.assign(context, assets.textures)
   // How often the port's pass runs, against the frames this system draws.
@@ -324,27 +310,7 @@ function build(
    * neither.
    */
   layer.updateBeforeType = NodeUpdateType.RENDER
-  const material = sensorRadiance(
-    new MeshBasicNodeMaterial(),
-    false,
-    false,
-    'alpha',
-  )
-  const radiance = material.outputNode!
-  material.outputNode = Fn(() => {
-    // The port's composite extends an untyped node, as its own docs say.
-    const cloud = vec4(layer as unknown as Node<'vec4'>)
-    output.assign(vec4(cloud.rgb.mul(gain), cloud.a))
-    return radiance
-  })()
-  // Alpha zero under the row's `over` blend: the scene keeps its own motion
-  // and depth behind a cloud.
-  material.mrtNode = mrt({ motion: vec4(0) })
-  material.name = 'clouds composite'
-  material.depthTest = false
-  material.depthWrite = false
-  material.fog = false
-  compositeOver(material)
+  const material = cloudsMaterial(layer as unknown as Node<'vec4'>, gain)
   material.vertexNode = vec4(positionGeometry.xy, sceneFarDepth, 1)
 
   const geometry = new PlaneGeometry(2, 2)
@@ -438,7 +404,7 @@ function build(
         far: false,
         history: on && sinceReset < SETTLE_FRAMES,
       },
-      bytes: { depth: depth.bytes, total: depth.bytes },
+      bytes: cloudsTargetBytes(pass, depth.bytes),
     }
     return { ...rest, settle: cloudsSettled(rest) }
   }
@@ -447,6 +413,7 @@ function build(
     overPass,
     beginFrame(inputs, sensor) {
       if (disposed) return
+      settings.flush(context)
       // The levers the page holds, drawn with or not: what the report says.
       levers = inputs === null ? null : { ...inputs.levers }
       const body =
@@ -550,13 +517,10 @@ function build(
         layered = false
       }
     },
-    afterFrame() {
-      // After a frame this system's pass drew, and only then, and into its
-      // own context: `cloudsTunables.ts`.
-      if (drawing) settings.flush(context)
+    afterFrame(renderer) {
+      radianceMeter.measure(renderer, scenePass.renderTarget, drawing)
     },
-    // The port holds no radiance at a trace's texels to read back.
-    captureRadiance: () => Promise.resolve(null),
+    captureRadiance: () => radianceMeter.request(),
     resetHistory() {
       reset()
     },
@@ -586,6 +550,7 @@ function build(
     dispose() {
       if (disposed) return
       disposed = true
+      radianceMeter.dispose()
       settings.detach(context)
       tablesOf.removeEventListener('update', tabled)
       scene.remove(mesh)

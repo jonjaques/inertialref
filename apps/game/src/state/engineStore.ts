@@ -1,3 +1,4 @@
+import type { CloudQuality } from '../render/cloudQuality.ts'
 import type { Exposure } from '@inertialref/rendering'
 import { useSyncExternalStore } from 'react'
 import { createStore, type StoreApi } from 'zustand/vanilla'
@@ -85,6 +86,7 @@ export interface EngineSnapshot {
   readonly observer: ObserverStatus | null
   /** Whether the page has a cloud renderer and the sensor can run it. */
   readonly cloudsAvailable: boolean
+  readonly cloudQuality: CloudQuality | null
   /** What the engine is drawing, so a panel's toggle reads the engine's answer
    *  rather than its own memory of what it asked for. */
   readonly presentation: PresentationSnapshot
@@ -104,6 +106,7 @@ export interface EngineSource {
   readonly character?: { status(): CharacterStatus }
   readonly exposure?: Exposure | null
   readonly cloudsAvailable: boolean
+  readonly cloudTunables: { readonly currentPreset: CloudQuality } | null
   readonly sensorDiagnostics: { readonly automaticAvailable: boolean } | null
   readonly harness: {
     status(): HarnessStatus
@@ -144,6 +147,7 @@ const IDLE: EngineSnapshot = {
   cinema: false,
   observer: null,
   cloudsAvailable: false,
+  cloudQuality: null,
   presentation: NOTHING_DRAWN,
   playhead: null,
 }
@@ -166,6 +170,7 @@ export function sampleOnce(store: EngineStore, source: EngineSource): void {
     // clouds need as automatic exposure does. The sensor's `clouds` report
     // would say the same and builds the whole report at each read, which a
     // sample taken on every store tick cannot afford.
+    cloudQuality: source.cloudTunables?.currentPreset ?? null,
     cloudsAvailable:
       source.cloudsAvailable &&
       source.sensorDiagnostics?.automaticAvailable === true,

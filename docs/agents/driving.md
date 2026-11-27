@@ -188,11 +188,14 @@ without writing to the library. See the
 
 A picture with weather is `shot=3` and carries `weather.regime`. The
 cornerstones (`weather-e1-cumulus-orbit` … `weather-g6-descent`) are
-`--preset` ids like the bundled shots; add `--query clouds=1` to draw their
-weather, and without it they draw Earth's deck and no volume
-([ADR-0067](../adr/0067-a-preset-holds-its-weather-and-a-cornerstone-is-a-preset-no-list-shows.md)).
-`--settle` waits on the clouds as well under the flag: their caches and 32
-frames of their history.
+`--preset` ids like the bundled shots. The default WebGPU port draws its stock
+weather on wet worlds without an authored deck. Ordinary Earth views use the
+textured deck. Use `--query clouds=1` to select the port explicitly,
+`--query clouds=march` to draw the picture's regime with the native diagnostic,
+or `--query clouds=0` to disable the volume. While clouds draw, `--settle`
+waits for the port's atmosphere tables and 128 history frames, or the march's
+caches and 32 history frames.
+[ADR-0076](../adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md).
 
 Invalid query overrides reach the page for error-path tests. Invalid JSON
 fixtures fail before Chrome starts. Run `pnpm vitest run presetUrl.test

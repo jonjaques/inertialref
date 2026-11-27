@@ -150,7 +150,7 @@ export const SIZES = Object.freeze({
 })
 
 /** On every URL: the system built, no interface, no names or traces, SDR. */
-const QUERY = ['clouds=1', 'chrome=0', 'layers=0', 'output=standard']
+const QUERY = ['chrome=0', 'layers=0', 'output=standard']
 
 const FAR = 'g:milky-way/s:P222_1_0_9/b:4' // P222_1_0_9 V: wet, dust haze at τ 0.4
 const MOON = `${FAR}.0` // V a, airless; the form is Luna's `b:2.0`, inferred
@@ -634,9 +634,9 @@ export function session(run, { url, port, fresh }) {
   const { width, height, dpr } = SIZES[run.size]
   const cold = run.type === 'cold'
   const query = [
-    ...(cold
-      ? ['timing=full', ...QUERY.filter((q) => run.flag || q !== 'clouds=1')]
-      : QUERY),
+    ...(cold ? ['timing=full'] : []),
+    cold && !run.flag ? 'clouds=0' : 'clouds=march',
+    ...QUERY,
     ...pageQuery(run),
   ]
   return [

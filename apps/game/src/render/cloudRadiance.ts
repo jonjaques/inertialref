@@ -3,7 +3,9 @@ import {
   type RenderTarget,
   StorageBufferAttribute,
   type StorageBufferNode,
+  type Texture,
   type TextureNode,
+  Vector2,
   type WebGPURenderer,
 } from 'three/webgpu'
 import {
@@ -18,17 +20,14 @@ import {
   storage,
   texture,
   uint,
+  uniform,
   uvec2,
   vec2,
   vec3,
 } from 'three/tsl'
 import { getLogger } from '@inertialref/shared'
 import type { CloudRadiance } from '@inertialref/devtools'
-import { follow } from './cloudFront.ts'
-import { screenTexel, traceScreen } from './cloudGeometry.ts'
-import type { CloudHistoryTextures } from './cloudHistory.ts'
-import { cloudStandInTexture } from './cloudNodes.ts'
-import type { CloudUniforms } from './cloudUniforms.ts'
+import { screenTexel, traceScreen } from './cloudScreen.ts'
 import { sceneRadianceGain } from './radiance.ts'
 
 /*
@@ -69,11 +68,27 @@ interface Kernel {
   readonly capacity: number
 }
 
+interface RadianceSource {
+  readonly width: number
+  readonly height: number
+  readonly historyWidth: number
+  readonly historyHeight: number
+  readonly light: Texture
+}
+
+function traceDimensions() {
+  return {
+    size: uniform(new Vector2()),
+    render: uniform(new Vector2()),
+    history: uniform(new Vector2()),
+  }
+}
+
 export class CloudRadianceMeter {
-  readonly #uniforms: CloudUniforms
-  readonly #history: () => CloudHistoryTextures
-  /** The scene target's resolved output, on a stand-in of its format until the first capture. */
-  readonly #scene = texture(cloudStandInTexture('2d', 'rgba16f'))
+  readonly #source: () => RadianceSource
+  readonly #alpha: 'opacity' | 'transmittance'
+  readonly #trace = traceDimensions()
+  #scene: TextureNode | null = null
   /** The history's newest light, which flips parity every converging frame. */
   #light: TextureNode | null = null
   #kernel: Kernel | null = null
@@ -88,9 +103,12 @@ export class CloudRadianceMeter {
   #failed = false
   #disposed = false
 
-  constructor(uniforms: CloudUniforms, history: () => CloudHistoryTextures) {
-    this.#uniforms = uniforms
-    this.#history = history
+  constructor(
+    source: () => RadianceSource,
+    alpha: 'opacity' | 'transmittance',
+  ) {
+    this.#source = source
+    this.#alpha = alpha
   }
 
   /**
@@ -126,13 +144,18 @@ export class CloudRadianceMeter {
       asked.settle(null)
       return
     }
-    const { x: width, y: height } = this.#uniforms.trace.size.value
-    const texels = width * height
     try {
-      const kernel = this.#kernelFor(texels)
-      follow(this.#scene, sceneTarget.texture)
-      // `#kernelFor` built the light's node on the first capture.
-      follow(this.#light!, this.#history().light)
+      const { width, height, historyWidth, historyHeight, light } =
+        this.#source()
+      const texels = width * height
+      this.#trace.size.value.set(width, height)
+      this.#trace.render.value.set(sceneTarget.width, sceneTarget.height)
+      this.#trace.history.value.set(historyWidth, historyHeight)
+      this.#scene ??= texture(sceneTarget.texture)
+      this.#scene.value = sceneTarget.texture
+      this.#light ??= texture(light)
+      this.#light.value = light
+      const kernel = this.#kernelFor(texels, this.#scene, this.#light)
       kernel.node.count = Math.ceil(texels / WORKGROUP) * WORKGROUP
       renderer.compute(kernel.node)
       this.#reading = asked
@@ -185,7 +208,7 @@ export class CloudRadianceMeter {
    * rebuilt only for a larger one: a storage buffer cannot grow under the
    * program that binds it, and a capture past a resize is rare.
    */
-  #kernelFor(texels: number): Kernel {
+  #kernelFor(texels: number, scene: TextureNode, light: TextureNode): Kernel {
     const held = this.#kernel
     if (held !== null && held.capacity >= texels) return held
     held?.node.dispose()
@@ -194,12 +217,11 @@ export class CloudRadianceMeter {
       new Float32Array(texels * STRIDE),
       1,
     )
-    const history = this.#history()
-    this.#light ??= texture(history.light)
     const node = radianceKernel(
-      this.#uniforms,
-      this.#scene,
-      this.#light,
+      this.#trace,
+      this.#alpha,
+      scene,
+      light,
       storage(buffer, 'float', texels * STRIDE),
       texels,
     )
@@ -209,13 +231,13 @@ export class CloudRadianceMeter {
 }
 
 function radianceKernel(
-  uniforms: CloudUniforms,
+  trace: ReturnType<typeof traceDimensions>,
+  alpha: 'opacity' | 'transmittance',
   scene: TextureNode,
   light: TextureNode,
   into: StorageBufferNode<'float'>,
   capacity: number,
 ): ComputeNode {
-  const { trace } = uniforms
   return Fn(() => {
     const width = uint(trace.size.x)
     const height = uint(trace.size.y)
@@ -230,8 +252,9 @@ function radianceKernel(
           .load(screenTexel(screen, trace.render))
           .rgb.div(sceneRadianceGain)
         const cloud = light.load(screenTexel(screen, trace.history))
-        const held = cloud.w
-          .lessThan(CLOUDLESS)
+        const opacity = alpha === 'opacity' ? cloud.w : cloud.w.oneMinus()
+        const held = opacity
+          .greaterThan(1 - CLOUDLESS)
           .or(max(max(abs(cloud.x), abs(cloud.y)), abs(cloud.z)).greaterThan(0))
         const at = instanceIndex.mul(uint(STRIDE))
         into.element(at).assign(dot(drawn, LUMA))

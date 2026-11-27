@@ -1,7 +1,7 @@
 # The clouds: takram's renderer, made the game's
 
 The cloud renderer is takram's. Their volumetric clouds draw in our scene
-through `three-clouds-webgpu`, the unofficial WebGPU port, with no change to it
+through `three-clouds-webgpu`, the unofficial WebGPU port
 ([build log, 14 Nov 2026](../../CONTEXT.md)). This plan makes that renderer the
 game's own: its presets and tunables in the picture's settings, its shadow on
 our ground and sea, our weather in its map, our air in its light. And it
@@ -35,25 +35,21 @@ marked as one.
 
 ## 1. What draws today
 
-- **Two renderers stand behind one flag, and the port behind a setting.**
-  `?clouds=1` builds the native march and `?clouds=takram` builds the port,
-  in the same slot of the frame, under the same `engine.clouds` levers. A
-  page holds one or the other. The display settings' "Volumetric clouds",
-  `render.clouds`, off by default, builds the port at `high`, its own preset, and
-  turns the volume on; a link's flag outranks it for its page. Without the
-  flag or the setting neither chunk loads and nothing draws.
-- **The adapter is four modules and no shader.** `render/clouds.ts` builds the
+- **The port is the default WebGPU volume.** A saved off switch disables
+  it. A link can select the port (`?clouds=1`), its quality, the native
+  diagnostic (`?clouds=march`), or the deck alone (`?clouds=0`).
+  Earth retains its textured deck on ordinary visits. [ADR-0076](../../docs/adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md)
+- **The adapter supplies the frame, depth, settings and composite.** `render/clouds.ts` builds the
   port's pass and takram's atmosphere and draws the port's resolved layer as
   the first opaque of the scene pass over the clouds. `render/cloudsFrame.ts`
   puts our eye in the port's world: a point of the body's datum stands on
   Earth's equator in ECEF, and the eye keeps its true height, heading and sun,
   in float64. `render/cloudsDepth.ts` copies the scene's 4× MSAA depth to one
-  sample. `render/cloudsTunables.ts` is the port's 174 tunables and five
-  presets as a table, written through `engine.cloudTunables`. Together they
-  are 1,893 lines, with 430 of tests.
+  sample. The settings table in `render/cloudsTunables.ts` writes to the port
+  through `engine.cloudTunables`.
 - **The native march is 41 modules and 45 test files,** 54,463 lines with
   their tests, under `render/cloud*.ts`.
-- **What the port costs,** at 1920 × 1080 and at 2880 × 1800, against a frame
+- **The 14 November spike costs** at 1920 × 1080 and at 2880 × 1800, against a frame
   that costs 5.2 and 11.9 ms without clouds:
 
   | Row                            | 1920 × 1080 | 2880 × 1800 |
@@ -255,31 +251,6 @@ is a cast from 400 km to standing with no frame that steps.
 **Size:** one rig session to decide. A handover, if it comes to one, is
 estimated at 600 lines and is the largest item here.
 
-### 5.5 Settings, presets and the frame budget
-
-**The defect.** The setting is a switch: on, the port draws at `high`. The five presets are reachable only from the console, and the one
-that looks right, `high`, costs more than the whole frame beside it.
-
-**The route is ours.** The five presets become the cloud row of the picture's
-settings, and the tunables a panel under the instruments. The default preset
-is chosen per machine by measurement, not by name: the mini's is the dearest
-that holds 60 Hz at 1920 × 1080 with `shadow.maxFar` set, and the Air's is the
-dearest that holds a steady 30. The port's `QualityGovernor` is tried against
-the presentation watchdog's own ladder, and one of the two steps the clouds:
-two governors on one frame chase each other.
-
-**A setting changes at run time, and three things about that are measured**
-(build log, 16 Nov 2026). A write lands only after a frame
-the port drew, or presets without `accurateSunSkyLight` fail to compile. A
-layer's `shadow` flag is a uniform, and the shadow pass's cost follows it only
-at the next graph rebuild. `preset('low')` on a page that drew `high` reads
-12.36 ms where a page built at `low` reads 9.61. The panel is not shipped
-until a preset reached by any path costs what it costs from boot.
-
-**Size, estimated:** 500 lines, most of it the panel. **Done when** every
-preset is one click, each has a measured row on both machines, and a preset
-round trip returns the frame to its cost within 3%.
-
 ### 5.6 Motion, and what draws in front of a cloud
 
 **The defect.** A cloud writes no motion vector, so temporal reconstruction
@@ -300,19 +271,14 @@ for the over pass, which is rule 69 as it stands.
 
 ### 5.7 Boot and the first frame
 
-**The defect.** The port's pipelines build on the first frame drawn, and
-the adapter builds every context at `high` and writes the preset a frame
-later, a workaround for a first-frame compile failure three 0.187 does not
-have: every preset now builds and draws from its own first frame (build log,
-25 Nov 2026). At 1920 × 1080 navigation to first light is 4.0 to 4.3 s below
-`high`, 14.9 s at `high` and 13.6 s at `ultra`, of which the warm-up's
-clouds step is 2.0 s at `high` and 80 ms below it.
+**The defect.** The port's pipelines build on the first frame drawn. At G1
+the cloud history can settle while the cover still shows. At 2880 × 1800 the
+cover lifted at 20.67 s at G1 and 22.76 s at G3 (build log, 26 Nov 2026).
 
-**The route.** The adapter builds at the preset the page will use, and a
-warm-up through `render/warmup.ts` draws the port's passes off screen behind
-the cover at that preset. The four baked textures
-are 2.86 MB of download, 2.10 MB of it `shape.bin`; brotli on the files is
-measured before any other format is considered.
+**The route.** The adapter builds at the page's selected preset (ADR-0076).
+Measure an off-screen warm-up of the port's passes behind the cover. The
+four baked textures are 2.86 MB of download, 2.10 MB of it `shape.bin`;
+measure brotli on the files before considering another format.
 
 **Done when** the cover lifts within the boot budget [perf](perf.md) holds
 for the page without clouds, plus two seconds, at `high`.
@@ -332,29 +298,22 @@ texels, against alpha.9's `experimental.freshTexelBlend` off and on.
 ## 6. The order
 
 Each phase lands green on its own, with its picture and its numbers, as a pull
-request into `the-weather`.
+request targeting `main`. Dependent phases can stack while a predecessor is in review.
 
-| Phase | Lands                                                                                                                                                                                              | Done when                                                                                                                                                                                                 |
-| ----- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| A     | **The name.** Landed. The adapter's modules and types carry no upstream's name. `?clouds=takram` stays the selector until phase C                                                                  | No type, module or engine field of ours says takram; the gate and the bundle checks pass                                                                                                                  |
-| B     | **The version.** Landed: three 0.187 with one upstream fix patched in, and the port at alpha.9 with fork build 8 ([ADR-0075](../../docs/adr/0075-three-r187.md))                                   | `pnpm check`, `pnpm test:gpu` and `pnpm presets:compare --all` pass; the cost table is taken again; the slow-turn cast is taken again; the first-frame compile is tried                                   |
-| C     | **The default.** `?clouds=1` builds this renderer, and the native march answers `?clouds=march`. The cornerstones' ledger and plates are taken with this renderer. The presets are in the settings | Every `weather-g*` cornerstone has a plate from this renderer; §5.5's three run-time defects are closed or bounded; a preset is one click; the port's targets have a declared memory figure at both sizes |
-| D     | **One shadow** (§5.1)                                                                                                                                                                              | §5.1                                                                                                                                                                                                      |
-| E     | **Our weather** (§5.2)                                                                                                                                                                             | §5.2                                                                                                                                                                                                      |
-| F     | **Our air,** routes 1 and 2 (§5.3)                                                                                                                                                                 | §5.3                                                                                                                                                                                                      |
-| G     | **Orbit** (§5.4), and the descent                                                                                                                                                                  | A cast from 400 km to standing with no frame that steps                                                                                                                                                   |
-| H     | **Motion and the front** (§5.6), **boot** (§5.7)                                                                                                                                                   | §5.6, §5.7                                                                                                                                                                                                |
-| J     | **The march retires.** The modules of §4 marked J are deleted with their tests, `?clouds=march` with them, and `CLOUD_MODULES` shrinks to what is left                                             | Nothing imports a deleted module; the page's chunk count is re-stated; ADR-0064 is superseded by the record of this renderer                                                                              |
+| Phase | Lands                                                                                                                                                  | Done when                                                                                                                    |
+| ----- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| F     | **Our air,** routes 1 and 2 (§5.3)                                                                                                                     | §5.3                                                                                                                         |
+| D     | **One shadow** (§5.1)                                                                                                                                  | §5.1                                                                                                                         |
+| E     | **Our weather** (§5.2)                                                                                                                                 | §5.2                                                                                                                         |
+| G     | **Orbit** (§5.4), and the descent                                                                                                                      | A cast from 400 km to standing with no frame that steps                                                                      |
+| H     | **Motion and the front** (§5.6), **boot** (§5.7)                                                                                                       | §5.6, §5.7                                                                                                                   |
+| J     | **The march retires.** The modules of §4 marked J are deleted with their tests, `?clouds=march` with them, and `CLOUD_MODULES` shrinks to what is left | Nothing imports a deleted module; the page's chunk count is re-stated; ADR-0064 is superseded by the record of this renderer |
 
 There is no phase I: beside a numbered phase the letter reads as a numeral.
-C comes before the shadow because every later phase is judged on plates, and
-plates of a renderer nobody defaults to are plates nobody looks at. J comes
-last because the far field and the front handle have readers until G and H.
-
-**What is recorded when.** Phase C writes the ADR that says the cloud renderer
-is the port's, what the adapter owns, and which of ADR-0063 to ADR-0066 it
-keeps: the frame's two passes and the scene unit stand, and the march's and
-the droplets' records are superseded when J lands.
+The six phase C plates are the reference for later phases. F comes first
+so the cloud and ground horizons can be judged together at G1 and G3.
+J comes last because the far field and front handle have readers until G
+and H. [Default renderer and presets](../../docs/adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md)
 
 ## 7. The traps already paid for
 
@@ -378,9 +337,6 @@ The ones a later phase would otherwise find again:
 
 ## 8. Open, and whose
 
-- **The selector's name.** `?clouds=takram` is the one place the upstream's
-  name still selects something. Phase C removes it. If the word should go
-  sooner, the selector takes a neutral value in phase A.
 - **Earth's deck.** The weather plan keeps Earth's textured deck until a
   volume can draw Earth with its shadow and its light. That rule stands; this
   renderer reaches Earth after phase E gives it Earth's climate.

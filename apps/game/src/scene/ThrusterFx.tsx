@@ -58,12 +58,12 @@ export function ThrusterFx({ engine }: { engine: GameEngine }) {
       if (staged === undefined) {
         const layout = thrusterLayoutFor(id)
         staged = {
-          // Seen through the clouds in front of them under `?clouds=1`.
+          // The native diagnostic attenuates plumes through its front samples.
           plumes: createThrusterPlumes(layout, engine.cloudFront ?? undefined),
           visuals: new ThrusterVisuals(layout),
           firing: new Float32Array(layout.nozzles.length),
         }
-        // Over the clouds under `?clouds=1`, before the warm-up compiles them.
+        // Mark plumes for the over pass before warm-up compiles them.
         if (engine.cloudsAvailable) markOverClouds(staged.plumes.group)
         built.set(id, staged)
       }

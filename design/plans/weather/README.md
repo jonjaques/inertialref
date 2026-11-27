@@ -1,70 +1,24 @@
 # The weather: where the work stands
 
-The working notes behind [the weather plan](../the-weather.md), and the guide
-to picking it up. The plan says what the weather is for. This directory says
-how far it has got, what each phase handed the next, and where the evidence
-is.
+The default WebGPU volume uses takram's renderer through `three-clouds-webgpu`.
+It draws stock weather on wet worlds without an authored deck. Earth keeps its
+textured deck on ordinary visits. The native diagnostic at `?clouds=march`
+draws the weather field and exposes its light and depth instruments.
+[The weather](../the-weather.md) · [Cloud renderer](../../../docs/adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md)
 
-**Phase 0, feasibility, has landed** in `the-weather`. Every cloud pass is
-built in its final place behind `?clouds=1`, drawing a placeholder field. Its
-four choices are made and recorded, the losing alternatives are deleted, and
-the plan cites the records.
+Six generated-world plates are the reference for the served body's air,
+surface shadows, weather maps, orbit and the transparent foreground. The
+phase C ledger identifies each PNG by hash and records the served body and
+cloud mask. Pass it to the weather capture's `--base` option to compare a
+new plate with the same view.
+[Phase C capture ledger](phase1/measurements/clouds-c-2026-11-26.json) · [Open phases](../the-clouds.md)
 
-**Phase 1, the volume and its light, is being built in waves** on
-`weather/phase-1`. Its cornerstones and their baseline are their own pull
-request; wave 1 is the contracts and three tool packages, merged and open as
-phase 1's draft. Phases 2 to 6 have not started.
+## The native reference
 
-**The renderer is takram's, through its WebGPU port.** The port draws in the
-native composite's slot behind `?clouds=takram`, unmodified (#212), and
-[the clouds](../the-clouds.md) is the plan that makes it the default, closes
-its gaps and retires the native march. For phase 1 that means:
-
-- **What judges a picture goes on:** the cornerstones and their ledger (K),
-  the capture's second pass (U), the instruments (I), the panel's tools (J),
-  the `motion` row (V) and the levers' contract (C). A picture is filtered by
-  the blind panel and passed by eye.
-- **What builds the native march's light stops:** the reference transport,
-  the phase tables, the higher orders, the irradiance table, the history and
-  the far march's refinements. No wave-2 package of that kind is started, and
-  one in flight lands only what the first group needs.
-- **What phase 0 measured still stands as measurement.** ADR-0063's two scene
-  passes and ADR-0065's scene unit bind the port as they bound the march.
-  ADR-0064's and ADR-0066's choices are the native march's, and are superseded
-  when it retires.
-
-Everything below this section is the record of the native march, kept because
-its measurements and its traps are cited from the ADRs.
-
-Nothing draws on `main`. Without the flag the cloud chunk is never loaded, and
-with it nothing draws until `engine.clouds.on` is set.
-
-## The branch
-
-The weather lands on one integration branch, **`the-weather`**, cut from `main`
-at `fb5aa5f5`. Each phase is a pull request into it, the phases are merged
-forward and never rebased, and `the-weather` merges to `main` when the weather
-ships.
-
-| Pull request | Branch                       | Holds                                                     | State                      |
-| ------------ | ---------------------------- | --------------------------------------------------------- | -------------------------- |
-| #206         | `weather/phase-0`            | Phase 0: the passes, the measurement, the four records    | Merged into `the-weather`  |
-| #199–#204    | `weather/p0-1-…` to `p0-6-…` | The same work as six stacked pull requests against `main` | Superseded by #206; closed |
-| #207         | `weather/p1-cornerstones`    | Phase 1's cornerstones, the velocity row, the baseline    | Merged into `the-weather`  |
-| #209         | `weather/phase-1`            | Phase 1 in waves; wave 1 is merged                        | Draft, on `the-weather`    |
-| #212         | `spike/takram-clouds`        | takram's clouds through their WebGPU port, behind a flag  | Merged into `the-weather`  |
-
-Wave 1 is package C, the contracts, at `78f6b3ee`, and three packages built
-beside it: I, the instruments; U, the capture's second pass; and J, the
-panel's tools ([phase 1's design](phase1/design.md) §10.2). Wave 2 is the
-rest of that section's second table. D, R1, T1, T2, H and L go first, since
-wave 3 waits on them, and T3, T4, E, Q, W, R2 and Y follow as slots free.
-Each builds from the contracts' tip and merges forward into
-`weather/phase-1`.
-
-Between package L's merge and package F's, a slice of the sun's depth baked
-from stale maps under a held clock is never redrawn, so no capture is taken
-from this branch in that interval.
+The measurements below describe the native march at the commits named in
+each table. Both renderers use the cornerstones, capture tools, motion row
+and weather levers. The reference transport, phase tables, higher orders
+and irradiance tables belong to the native diagnostic.
 
 ## What phase 0 decided
 

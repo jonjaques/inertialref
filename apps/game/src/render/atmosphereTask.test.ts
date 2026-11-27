@@ -319,7 +319,7 @@ describe('the scattering cache', () => {
         airHeights: heights,
       }) as unknown as RenderBody
     const factory = (() => null) as unknown as CloudChainFactory
-    const handle = {} as CloudsHandle
+    const handle = { state: () => ({ preset: 'high' }) } as CloudsHandle
     const pool = inlinePool()
     const engine = {
       pool: () => pool,
@@ -329,7 +329,7 @@ describe('the scattering cache', () => {
     }
     const canvas = canvasClouds(engine, {
       native: async () => factory,
-      takram: async () => ({ factory, handle }),
+      port: async () => ({ factory, handle }),
       webgpu: () => true,
     })
     const renderer = async () => ({ backend: { isWebGPUBackend: true } })
@@ -353,7 +353,7 @@ describe('the scattering cache', () => {
       expect(bare.sky).toBeUndefined()
       expect(skyBakes.count).toBe(0)
 
-      await canvas.withClouds(renderer, cloudRendererOf('1')!)({})
+      await canvas.withClouds(renderer, cloudRendererOf('march')!)({})
       expect(request(1.06)).toMatchObject({ wanted: ['sky'] })
       const lit = await warmScattering(pool, hazeAt(1.06), topRatio, heights, {
         sky: true,
@@ -439,7 +439,7 @@ describe('render.convolvePhase', () => {
   })
 
   it('costs a page without clouds nothing: a registry served and a haze baked convolve and decode no table', async () => {
-    // The page without `?clouds=1` builds no cloud system, so no `CloudPhase`
+    // A page with clouds disabled builds no cloud system, so no `CloudPhase`
     // and no `serve` (`cloudSensor.gpu.test.ts`, "builds nothing of the
     // clouds"). What it does build is the worker's registry, which holds
     // this task, and the air's bake on the same pool.

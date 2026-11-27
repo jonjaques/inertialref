@@ -303,8 +303,11 @@ describe('the capture’s plan', () => {
   it('asks for the flag in the volume arm alone, and settles and waits before it reads and shoots', () => {
     const volume = stillArgs('weather-e1-cumulus-orbit', 'volume', 'a.png')
     const deck = stillArgs('weather-e1-cumulus-orbit', 'deck', 'b.png')
-    expect(volume).toContain('clouds=1')
-    expect(deck).not.toContain('clouds=1')
+    expect(volume).toContain('clouds=march')
+    expect(
+      stillArgs('weather-g6-descent', 'volume', 'g6.png', null, 'port'),
+    ).toContain('clouds=1')
+    expect(deck).toContain('clouds=0')
     for (const args of [volume, deck]) {
       for (const query of ['chrome=0', 'layers=0', 'output=standard'])
         expect(args).toContain(query)
@@ -527,6 +530,7 @@ describe('the drop rule, over rates and jitter', () => {
 describe('what the capture refuses', () => {
   const read = {
     mode: 'standard',
+    boot: 'booted',
     chrome: false,
     settled: { ok: true },
     weather: 'drawn',
@@ -534,6 +538,40 @@ describe('what the capture refuses', () => {
     cloud: { texels: 81_000, share: 0.4 },
   }
   const E1 = 'weather-e1-cumulus-orbit'
+
+  it('refuses a settled trace while the boot cover is still drawing', () => {
+    expect(() =>
+      checkStill(E1, 'volume', { ...read, boot: 'drawing' }),
+    ).toThrow(/drawing.*refused/)
+  })
+
+  it('waits for first light before settling every fresh capture and times out on a stuck cover', async () => {
+    const cast = castByKey('weather-g6-descent-fast')
+    const takes = [
+      stillArgs(E1, 'volume', 'plate.png'),
+      castArgs(cast, true),
+      sampleArgs(cast, [0], ['sample.png']),
+    ]
+    const file = takes[0][takes[0].indexOf('--file') + 1]
+    for (const args of takes)
+      expect(
+        args.slice(args.indexOf('--settle') - 2, args.indexOf('--settle')),
+      ).toEqual(['--file', file])
+    const script = await readFile(file, 'utf8')
+    const firstLight = (liftAt) => {
+      let now = 0
+      return vm.runInNewContext(wrap(script), {
+        ir: { status: () => ({ boot: now >= liftAt ? 'booted' : 'drawing' }) },
+        performance: { now: () => now },
+        setTimeout: (resume, ms) => {
+          now += ms
+          resume()
+        },
+      })
+    }
+    await expect(firstLight(20_000)).resolves.toBe('booted')
+    await expect(firstLight(Infinity)).rejects.toThrow(/first light.*drawing/)
+  })
 
   it('a still not settled, not in SDR, with the interface up, not in its arm’s weather, or not drawing its own body’s volume', () => {
     expect(checkStill(E1, 'volume', read)).toBe(read)
@@ -568,6 +606,46 @@ describe('what the capture refuses', () => {
     expect(servedAddress('weather-g1-fair')).toBe(
       'g:milky-way/s:P222_3_2_k/b:3',
     )
+  })
+
+  it('accepts a settled port plate only with its own body, its stock weather and the full trace readback', () => {
+    const id = 'weather-g6-descent'
+    const clouds = {
+      on: true,
+      served: servedAddress(id),
+      settle: { pending: false },
+      extents: { trace: [4, 3] },
+    }
+    const port = {
+      ...read,
+      weather: 'renderer-default',
+      port: { preset: 'high', frame: { marches: 130 } },
+      clouds,
+      cloud: { texels: 12, share: 0, meanClear: 0.3, meanCloud: null },
+    }
+    expect(checkStill(id, 'volume', port, 'port')).toBe(port)
+    for (const bad of [
+      { ...port, port: null },
+      { ...port, weather: 'drawn' },
+      { ...port, clouds: { ...clouds, served: null } },
+      { ...port, clouds: { ...clouds, settle: { pending: true } } },
+      { ...port, cloud: { ...port.cloud, texels: 8 } },
+      { ...port, cloud: { ...port.cloud, meanClear: null } },
+    ])
+      expect(() => checkStill(id, 'volume', bad, 'port')).toThrow(/refused/)
+    expect(() => checkStill(id, 'volume', port, 'march')).toThrow(/refused/)
+    expect(
+      parseCapture([
+        '--phase',
+        '1',
+        '--url',
+        URL_,
+        '--renderer',
+        'port',
+        '--only',
+        'g1,g2,g3,g4,g5,g6',
+      ]).stills.map(tagOf),
+    ).toEqual(['g1', 'g2', 'g3', 'g4', 'g5', 'g6'])
   })
 
   it('a take whose page was built from another tree, or from an edited one', () => {
@@ -833,6 +911,7 @@ describe('what the capture refuses', () => {
         Math,
         ir: {
           cloudRadiance: async () => capture,
+          status: () => ({ boot: 'booted' }),
           observatory: {
             time: 1,
             status: () => ({
@@ -870,6 +949,7 @@ describe('what the capture refuses', () => {
       meanCloud: 2,
       meanClear: 0.5,
     })
+    expect(read.boot).toBe('booted')
     expect(read.weather).toBe('drawn')
     expect(read.processing).toBe('enhanced')
     expect(read.sun.place.latitude).toBeCloseTo(0.1 / DEG, 9)

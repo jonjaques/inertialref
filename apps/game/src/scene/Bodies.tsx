@@ -319,7 +319,7 @@ export function Bodies({
     const visibility = engine.visibilityProcessing
     if (scene === null || container === null) return
     residency.begin()
-    // Under `?clouds=1` alone: without it no lever is read and no deck moves.
+    // A canvas without a cloud renderer keeps each body's authored deck.
     const clouds = engine.cloudsAvailable ? engine.clouds : null
     // The served body alone: the report beside it is built whole at each read.
     const served =
@@ -366,8 +366,7 @@ export function Bodies({
       let ringMesh: Mesh | null = null
       let ringMaterial: RingMaterial | null = null
       if (ringed) {
-        // Seen through the clouds in front of it under `?clouds=1`; the
-        // phase-0 graph without, which is every page with no handle.
+        // Only the native march supplies the cloud samples in front of the ring.
         ringMaterial = createRingMaterial(engine.cloudFront ?? undefined)
         ringMesh = new Mesh(rings, ringMaterial.material)
         ringMesh.renderOrder = 2
