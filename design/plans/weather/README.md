@@ -16,7 +16,10 @@ The default WebGPU volume now uses takram's renderer through
 Earth keeps its textured deck on ordinary visits. The next cloud phases
 cover the served body's air, surface shadows, weather maps, orbit and the
 transparent foreground. Their reference images are the six generated-world
-cornerstones captured with the port. [Cloud renderer](../../../docs/adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md) · [Open phases](../the-clouds.md)
+cornerstones captured with the port. The capture ledger records the original
+PNG hashes, the served body and the cloud mask for each. Pass it to the weather
+capture's `--base` option to compare against phase C's hosted plates.
+[Phase C capture ledger](phase1/measurements/clouds-c-2026-11-26.json). [Cloud renderer](../../../docs/adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md) · [Open phases](../the-clouds.md)
 
 ## The native reference
 

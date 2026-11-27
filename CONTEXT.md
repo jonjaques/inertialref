@@ -13974,6 +13974,14 @@ at 2880 × 1800. These figures exclude lookup tables, downloaded noise and
 driver allocation overhead. The 175 tunables and five quality presets
 remain available to the author. [ADR-0076](docs/adr/0076-the-webgpu-cloud-renderer-is-takrams-port.md)
 
+At 2880 × 1800, G1's cloud history was ready 13.37 s after navigation.
+The cover lifted at 20.67 s. G3 settled at 14.02 s and reached first light at
+22.76 s. In the first six takes, G1, G3 and G5 photographed the cover even
+though their body, history and luminance were correct. The weather capture
+waits for `ir.status().boot` to reach `booted` before settling, and checks
+the phase again on the read kept with the plate. All six replacement PNGs
+show the scene on production build `377787ae`. [Capture ledger](design/plans/weather/phase1/measurements/clouds-c-2026-11-26.json)
+
 ## Known gaps
 
 - **The cloud guide still needs a human on headphones.** Spoken delivery across

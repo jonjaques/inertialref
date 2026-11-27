@@ -1,0 +1,1468 @@
+{
+  "phase": 1,
+  "renderer": "port",
+  "commit": "377787aed0a38c73006d28e30fea005e78ab1b75",
+  "tree": "377787ae",
+  "levers": null,
+  "clean": true,
+  "url": "http://127.0.0.1:44731/",
+  "rig": {
+    "width": 1440,
+    "height": 900,
+    "dpr": 2,
+    "colorProfile": "srgb",
+    "queries": ["chrome=0", "layers=0", "output=standard"]
+  },
+  "fixtures": {
+    "references": "183b14ed95bf55ba7929e31b42aae739b4ed3f6e947d96b0089bb055eb9c9242",
+    "cornerstones": "ddcdfc2ae8b840e52528efc33cdf34a9ba524d999b7f42a670da5d590cd462ce"
+  },
+  "base": null,
+  "build": {
+    "id": "377787ae",
+    "tree": null
+  },
+  "chrome": "Chrome/158.0.8127.89",
+  "stills": [
+    {
+      "id": "weather-g1-fair",
+      "arm": "volume",
+      "file": "weather-g1-fair-volume.png",
+      "sha256": "c8039239cb7ecff2939f57addb1d200392a76135b03a08a950ce511da9880318",
+      "read": {
+        "boot": "booted",
+        "mode": "standard",
+        "chrome": false,
+        "port": {
+          "preset": "high",
+          "cloudType": null,
+          "overrides": {},
+          "frame": {
+            "served": "g:milky-way/s:P222_3_2_k/b:3",
+            "altitude": 252.57264623139054,
+            "drift": 6.223363460494332e-11,
+            "eye": {
+              "x": 6378389.572646231,
+              "y": -3.467448550509289e-12,
+              "z": -6.213696224222076e-11
+            },
+            "sun": {
+              "x": 0.9602537483296713,
+              "y": -8.289207194185633e-5,
+              "z": 0.2791285222755288
+            },
+            "bodyRadius": 3922146.955680374,
+            "compression": 1,
+            "gain": [1.7947092514979648, 1.6745656754796405, 1.730364860361004],
+            "processing": "enhanced",
+            "tables": 4,
+            "frames": 629,
+            "marches": 630,
+            "graphVersion": 1
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 25.734083046114705,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 98977.5083075788,
+        "stance": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.29062177877890516,
+            "longitude": 0.6500744120490799,
+            "height": 40,
+            "heading": 2.094098135016834,
+            "pitch": 0.06981317007977318
+          }
+        },
+        "processing": "enhanced",
+        "sun": {
+          "elevation": 73.7918001763841,
+          "azimuth": 359.9829850226814
+        },
+        "light": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "sun": 73.7918001763841,
+          "phase": 14.685470301807797,
+          "lit": true
+        },
+        "settled": {
+          "ok": true,
+          "galaxy": {
+            "pending": false,
+            "tiles": "0/1638",
+            "survey": false
+          },
+          "terrain": {
+            "pending": 0,
+            "patches": 730,
+            "deposits": false
+          },
+          "clouds": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          }
+        },
+        "clouds": {
+          "available": true,
+          "reason": null,
+          "on": true,
+          "levers": {
+            "on": true,
+            "weather": "fair-cumulus",
+            "farFootprint": 800,
+            "lightTaps": 4,
+            "composite": "identity",
+            "force": "none",
+            "warp": 1000,
+            "scrubSeconds": 10800,
+            "flySpeed": 250,
+            "traceScale": 1,
+            "maxSteps": 192,
+            "jitterFrame": null,
+            "served": null,
+            "second": null,
+            "deck": "auto",
+            "stats": false,
+            "phaseMode": "mean",
+            "phaseBins": 4,
+            "jitter": "ign",
+            "transport": "slab",
+            "handoverBand": 2,
+            "clip": 1.25,
+            "over": "passes",
+            "sunSlices": 8,
+            "sunRamp": 16,
+            "farBlocks": 1
+          },
+          "leversHash": null,
+          "served": "g:milky-way/s:P222_3_2_k/b:3",
+          "second": null,
+          "appliedWeather": null,
+          "regime": "converging",
+          "reset": "none",
+          "extents": {
+            "render": [2880, 1800],
+            "css": [1440, 900],
+            "trace": [720, 450],
+            "history": [2880, 1800]
+          },
+          "frames": 629,
+          "resets": 2,
+          "sinceReset": 629,
+          "pending": {
+            "maps": false,
+            "clipmap": false,
+            "volume": false,
+            "sunDepth": false,
+            "far": false,
+            "history": false
+          },
+          "settle": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          },
+          "bytes": {
+            "depth": 20736000,
+            "march": 7776000,
+            "resolve": 82944000,
+            "history": 82944000,
+            "shadows": 25165824,
+            "total": 219565824
+          },
+          "pipelines": {
+            "render": 0,
+            "compute": 0
+          },
+          "steps": null,
+          "residual": null
+        },
+        "weather": "renderer-default",
+        "build": {
+          "id": "377787ae",
+          "tree": null
+        },
+        "cloud": {
+          "texels": 324000,
+          "share": 1,
+          "meanCloud": 0.23283360751345752,
+          "meanClear": null
+        }
+      },
+      "glory": {
+        "sunInCamera": [
+          -0.2417324018635497, 0.9676501296099514, -0.0722403803639167
+        ],
+        "antisolar": {
+          "x": 7898.397996891534,
+          "y": 26752.842277604024
+        },
+        "inFrame": false
+      },
+      "commit": "377787aed0a38c73006d28e30fea005e78ab1b75",
+      "clean": true,
+      "stance": {
+        "id": "weather-g1-fair",
+        "address": "g:milky-way/s:P222_3_2_k/b:3",
+        "pose": {
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.29062177877890516,
+            "longitude": 0.6500744120490799,
+            "height": 40,
+            "heading": 2.094098135016834,
+            "pitch": 0.06981317007977318
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 25.734083046114705,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 98977.5083075788
+      },
+      "fixtures": {
+        "references": "183b14ed95bf55ba7929e31b42aae739b4ed3f6e947d96b0089bb055eb9c9242",
+        "cornerstones": "ddcdfc2ae8b840e52528efc33cdf34a9ba524d999b7f42a670da5d590cd462ce"
+      },
+      "processing": "enhanced",
+      "levers": {
+        "hash": "6dcd7f1d507fe83b2b4f453136501bcd7627cb61ed97cb1c05397fec1bcbc3ab",
+        "size": [2880, 1800]
+      },
+      "role": {
+        "name": "candidate",
+        "differences": []
+      }
+    },
+    {
+      "id": "weather-g2-overcast-shore",
+      "arm": "volume",
+      "file": "weather-g2-overcast-shore-volume.png",
+      "sha256": "611e09ce72b776de00fe554fb40439546a7b4869fe5f9f4f2597db7328a20354",
+      "read": {
+        "boot": "booted",
+        "mode": "standard",
+        "chrome": false,
+        "port": {
+          "preset": "high",
+          "cloudType": null,
+          "overrides": {},
+          "frame": {
+            "served": "g:milky-way/s:P222_3_2_k/b:3",
+            "altitude": 194.62172112474218,
+            "drift": 6.629575475180281e-11,
+            "eye": {
+              "x": 6378331.621721125,
+              "y": -5.262279501039302e-11,
+              "z": -4.0323300254385686e-11
+            },
+            "sun": {
+              "x": 0.5735764458006818,
+              "y": 0.8028919123185378,
+              "z": 0.16240270304443552
+            },
+            "bodyRadius": 3922146.955680374,
+            "compression": 1,
+            "gain": [1.7947092514979648, 1.6745656754796405, 1.730364860361004],
+            "processing": "enhanced",
+            "tables": 4,
+            "frames": 606,
+            "marches": 607,
+            "graphVersion": 1
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 25.734083046114705,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 82596.09687821846,
+        "stance": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.28844336598413356,
+            "longitude": 0.6635588376687422,
+            "height": 2,
+            "heading": 0.15707963267948966,
+            "pitch": 0.08726646259971647
+          }
+        },
+        "processing": "enhanced",
+        "sun": {
+          "elevation": 35.00000066121768,
+          "azimuth": 78.5649428545055
+        },
+        "light": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "sun": 35.000000661217676,
+          "phase": 14.657690655539739,
+          "lit": true
+        },
+        "settled": {
+          "ok": true,
+          "galaxy": {
+            "pending": false,
+            "tiles": "0/1638",
+            "survey": false
+          },
+          "terrain": {
+            "pending": 0,
+            "patches": 795,
+            "deposits": false
+          },
+          "clouds": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          }
+        },
+        "clouds": {
+          "available": true,
+          "reason": null,
+          "on": true,
+          "levers": {
+            "on": true,
+            "weather": "overcast",
+            "farFootprint": 800,
+            "lightTaps": 4,
+            "composite": "identity",
+            "force": "none",
+            "warp": 1000,
+            "scrubSeconds": 10800,
+            "flySpeed": 250,
+            "traceScale": 1,
+            "maxSteps": 192,
+            "jitterFrame": null,
+            "served": null,
+            "second": null,
+            "deck": "auto",
+            "stats": false,
+            "phaseMode": "mean",
+            "phaseBins": 4,
+            "jitter": "ign",
+            "transport": "slab",
+            "handoverBand": 2,
+            "clip": 1.25,
+            "over": "passes",
+            "sunSlices": 8,
+            "sunRamp": 16,
+            "farBlocks": 1
+          },
+          "leversHash": null,
+          "served": "g:milky-way/s:P222_3_2_k/b:3",
+          "second": null,
+          "appliedWeather": null,
+          "regime": "converging",
+          "reset": "none",
+          "extents": {
+            "render": [2880, 1800],
+            "css": [1440, 900],
+            "trace": [720, 450],
+            "history": [2880, 1800]
+          },
+          "frames": 606,
+          "resets": 2,
+          "sinceReset": 606,
+          "pending": {
+            "maps": false,
+            "clipmap": false,
+            "volume": false,
+            "sunDepth": false,
+            "far": false,
+            "history": false
+          },
+          "settle": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          },
+          "bytes": {
+            "depth": 20736000,
+            "march": 7776000,
+            "resolve": 82944000,
+            "history": 82944000,
+            "shadows": 25165824,
+            "total": 219565824
+          },
+          "pipelines": {
+            "render": 0,
+            "compute": 0
+          },
+          "steps": null,
+          "residual": null
+        },
+        "weather": "renderer-default",
+        "build": {
+          "id": "377787ae",
+          "tree": null
+        },
+        "cloud": {
+          "texels": 324000,
+          "share": 0.6356450617283951,
+          "meanCloud": 0.13799342763171174,
+          "meanClear": 0.35654445747035757
+        }
+      },
+      "glory": {
+        "sunInCamera": [
+          0.7676016005800088, 0.5464669909259282, 0.3349053756143221
+        ],
+        "antisolar": null,
+        "inFrame": false
+      },
+      "commit": "377787aed0a38c73006d28e30fea005e78ab1b75",
+      "clean": true,
+      "stance": {
+        "id": "weather-g2-overcast-shore",
+        "address": "g:milky-way/s:P222_3_2_k/b:3",
+        "pose": {
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.28844336598413356,
+            "longitude": 0.6635588376687422,
+            "height": 2,
+            "heading": 0.15707963267948966,
+            "pitch": 0.08726646259971647
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 25.734083046114705,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 82596.09687821846
+      },
+      "fixtures": {
+        "references": "183b14ed95bf55ba7929e31b42aae739b4ed3f6e947d96b0089bb055eb9c9242",
+        "cornerstones": "ddcdfc2ae8b840e52528efc33cdf34a9ba524d999b7f42a670da5d590cd462ce"
+      },
+      "processing": "enhanced",
+      "levers": {
+        "hash": "cdfa0f27724b8e0e7ab20fbdbd8af4f856d999cafac5f08d25781deac0ba5446",
+        "size": [2880, 1800]
+      },
+      "role": {
+        "name": "candidate",
+        "differences": []
+      }
+    },
+    {
+      "id": "weather-g3-underlit-dusk",
+      "arm": "volume",
+      "file": "weather-g3-underlit-dusk-volume.png",
+      "sha256": "985878576e99bae6090a44bdd7a110efedd52bf8b467ad1f82148f5c8a8e885b",
+      "read": {
+        "boot": "booted",
+        "mode": "standard",
+        "chrome": false,
+        "port": {
+          "preset": "high",
+          "cloudType": null,
+          "overrides": {},
+          "frame": {
+            "served": "g:milky-way/s:P222_3_2_k/b:3",
+            "altitude": 214.5726859671995,
+            "drift": 1.482928143050915e-10,
+            "eye": {
+              "x": 6378351.572685967,
+              "y": 4.3517189851627336e-11,
+              "z": -1.417639339251764e-10
+            },
+            "sun": {
+              "x": -0.026176980212665124,
+              "y": -0.9995519851407213,
+              "z": -0.01451188162125161
+            },
+            "bodyRadius": 3922146.955680374,
+            "compression": 1,
+            "gain": [1.7947092514979648, 1.6745656754796405, 1.730364860361004],
+            "processing": "enhanced",
+            "tables": 4,
+            "frames": 796,
+            "marches": 797,
+            "graphVersion": 1
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 23.051785523653994,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 17857.64342676884,
+        "stance": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.29062177877890516,
+            "longitude": 0.6500744120490799,
+            "height": 2,
+            "heading": 4.6978716142562265,
+            "pitch": 0.2617993877991494
+          }
+        },
+        "processing": "enhanced",
+        "sun": {
+          "elevation": -1.5000018294717878,
+          "azimuth": 269.16821619119287
+        },
+        "light": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "sun": -1.5000018294717878,
+          "phase": 14.551868687460136,
+          "lit": false
+        },
+        "settled": {
+          "ok": true,
+          "galaxy": {
+            "pending": false,
+            "tiles": "0/1638",
+            "survey": false
+          },
+          "terrain": {
+            "pending": 0,
+            "patches": 717,
+            "deposits": false
+          },
+          "clouds": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          }
+        },
+        "clouds": {
+          "available": true,
+          "reason": null,
+          "on": true,
+          "levers": {
+            "on": true,
+            "weather": "dusk-altocumulus",
+            "farFootprint": 800,
+            "lightTaps": 4,
+            "composite": "identity",
+            "force": "none",
+            "warp": 1000,
+            "scrubSeconds": 10800,
+            "flySpeed": 250,
+            "traceScale": 1,
+            "maxSteps": 192,
+            "jitterFrame": null,
+            "served": null,
+            "second": null,
+            "deck": "auto",
+            "stats": false,
+            "phaseMode": "mean",
+            "phaseBins": 4,
+            "jitter": "ign",
+            "transport": "slab",
+            "handoverBand": 2,
+            "clip": 1.25,
+            "over": "passes",
+            "sunSlices": 8,
+            "sunRamp": 16,
+            "farBlocks": 1
+          },
+          "leversHash": null,
+          "served": "g:milky-way/s:P222_3_2_k/b:3",
+          "second": null,
+          "appliedWeather": null,
+          "regime": "converging",
+          "reset": "none",
+          "extents": {
+            "render": [2880, 1800],
+            "css": [1440, 900],
+            "trace": [720, 450],
+            "history": [2880, 1800]
+          },
+          "frames": 796,
+          "resets": 2,
+          "sinceReset": 796,
+          "pending": {
+            "maps": false,
+            "clipmap": false,
+            "volume": false,
+            "sunDepth": false,
+            "far": false,
+            "history": false
+          },
+          "settle": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          },
+          "bytes": {
+            "depth": 20736000,
+            "march": 7776000,
+            "resolve": 82944000,
+            "history": 82944000,
+            "shadows": 25165824,
+            "total": 219565824
+          },
+          "pipelines": {
+            "render": 0,
+            "compute": 0
+          },
+          "steps": null,
+          "residual": null
+        },
+        "weather": "renderer-default",
+        "build": {
+          "id": "377787ae",
+          "tree": null
+        },
+        "cloud": {
+          "texels": 324000,
+          "share": 0.7923024691358025,
+          "meanCloud": 0.007626880079370443,
+          "meanClear": 0.007736805861931067
+        }
+      },
+      "glory": {
+        "sunInCamera": [0, -0.28401537531933024, 0.9588197257994956],
+        "antisolar": null,
+        "inFrame": false
+      },
+      "commit": "377787aed0a38c73006d28e30fea005e78ab1b75",
+      "clean": true,
+      "stance": {
+        "id": "weather-g3-underlit-dusk",
+        "address": "g:milky-way/s:P222_3_2_k/b:3",
+        "pose": {
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.29062177877890516,
+            "longitude": 0.6500744120490799,
+            "height": 2,
+            "heading": 4.6978716142562265,
+            "pitch": 0.2617993877991494
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 23.051785523653994,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 17857.64342676884
+      },
+      "fixtures": {
+        "references": "183b14ed95bf55ba7929e31b42aae739b4ed3f6e947d96b0089bb055eb9c9242",
+        "cornerstones": "ddcdfc2ae8b840e52528efc33cdf34a9ba524d999b7f42a670da5d590cd462ce"
+      },
+      "processing": "enhanced",
+      "levers": {
+        "hash": "0aba9949aa595eb9a827b8b9dc2745913835a65c8a052f4b25f40419173b42d1",
+        "size": [2880, 1800]
+      },
+      "role": {
+        "name": "candidate",
+        "differences": []
+      }
+    },
+    {
+      "id": "weather-g4-over-deck",
+      "arm": "volume",
+      "file": "weather-g4-over-deck-volume.png",
+      "sha256": "af232843750418af158eaf60f7d84b3ce2deb273696058996d44600bd5f05fd4",
+      "read": {
+        "boot": "booted",
+        "mode": "standard",
+        "chrome": false,
+        "port": {
+          "preset": "high",
+          "cloudType": null,
+          "overrides": {},
+          "frame": {
+            "served": "g:milky-way/s:P222_3_2_k/b:3",
+            "altitude": 4300.011565341614,
+            "drift": 1.7024634315886815e-10,
+            "eye": {
+              "x": 6382437.011565342,
+              "y": -1.61662683240138e-10,
+              "z": -5.3375970310298726e-11
+            },
+            "sun": {
+              "x": 0.5735764168290075,
+              "y": -0.8020568785934707,
+              "z": 0.16647779899582765
+            },
+            "bodyRadius": 3922146.955680374,
+            "compression": 1,
+            "gain": [1.7947092514979648, 1.6745656754796405, 1.730364860361004],
+            "processing": "enhanced",
+            "tables": 4,
+            "frames": 1089,
+            "marches": 1090,
+            "graphVersion": 1
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 17.137776080905375,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 6219.386038889019,
+        "stance": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.2928832177490203,
+            "longitude": 0.6526948251778841,
+            "height": 4107.967027110147,
+            "heading": 1.7754538713619026,
+            "pitch": -0.6108652143769023
+          }
+        },
+        "processing": "enhanced",
+        "sun": {
+          "elevation": 34.999998635150746,
+          "azimuth": 281.7260135492
+        },
+        "light": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "sun": 34.999998635150746,
+          "phase": 14.533522864444704,
+          "lit": true
+        },
+        "settled": {
+          "ok": true,
+          "galaxy": {
+            "pending": false,
+            "tiles": "0/1638",
+            "survey": false
+          },
+          "terrain": {
+            "pending": 0,
+            "patches": 658,
+            "deposits": false
+          },
+          "clouds": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          }
+        },
+        "clouds": {
+          "available": true,
+          "reason": null,
+          "on": true,
+          "levers": {
+            "on": true,
+            "weather": "stratocumulus",
+            "farFootprint": 800,
+            "lightTaps": 4,
+            "composite": "identity",
+            "force": "none",
+            "warp": 1000,
+            "scrubSeconds": 10800,
+            "flySpeed": 250,
+            "traceScale": 1,
+            "maxSteps": 192,
+            "jitterFrame": null,
+            "served": null,
+            "second": null,
+            "deck": "auto",
+            "stats": false,
+            "phaseMode": "mean",
+            "phaseBins": 4,
+            "jitter": "ign",
+            "transport": "slab",
+            "handoverBand": 2,
+            "clip": 1.25,
+            "over": "passes",
+            "sunSlices": 8,
+            "sunRamp": 16,
+            "farBlocks": 1
+          },
+          "leversHash": null,
+          "served": "g:milky-way/s:P222_3_2_k/b:3",
+          "second": null,
+          "appliedWeather": null,
+          "regime": "converging",
+          "reset": "none",
+          "extents": {
+            "render": [2880, 1800],
+            "css": [1440, 900],
+            "trace": [720, 450],
+            "history": [2880, 1800]
+          },
+          "frames": 1089,
+          "resets": 2,
+          "sinceReset": 1089,
+          "pending": {
+            "maps": false,
+            "clipmap": false,
+            "volume": false,
+            "sunDepth": false,
+            "far": false,
+            "history": false
+          },
+          "settle": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          },
+          "bytes": {
+            "depth": 20736000,
+            "march": 7776000,
+            "resolve": 82944000,
+            "history": 82944000,
+            "shadows": 25165824,
+            "total": 219565824
+          },
+          "pipelines": {
+            "render": 0,
+            "compute": 0
+          },
+          "steps": null,
+          "residual": null
+        },
+        "weather": "renderer-default",
+        "build": {
+          "id": "377787ae",
+          "tree": null
+        },
+        "cloud": {
+          "texels": 324000,
+          "share": 0.9809783950617283,
+          "meanCloud": 0.18766637454340887,
+          "meanClear": 0.2500850127530276
+        }
+      },
+      "glory": {
+        "sunInCamera": [2.7755575615628914e-16, -1.6653345369377348e-16, -1],
+        "antisolar": {
+          "x": 1439.9999999999998,
+          "y": 899.9999999999998
+        },
+        "inFrame": true
+      },
+      "commit": "377787aed0a38c73006d28e30fea005e78ab1b75",
+      "clean": true,
+      "stance": {
+        "id": "weather-g4-over-deck",
+        "address": "g:milky-way/s:P222_3_2_k/b:3",
+        "pose": {
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.2928832177490203,
+            "longitude": 0.6526948251778841,
+            "height": 4107.967027110147,
+            "heading": 1.7754538713619026,
+            "pitch": -0.6108652143769023
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 17.137776080905375,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 6219.386038889019
+      },
+      "fixtures": {
+        "references": "183b14ed95bf55ba7929e31b42aae739b4ed3f6e947d96b0089bb055eb9c9242",
+        "cornerstones": "ddcdfc2ae8b840e52528efc33cdf34a9ba524d999b7f42a670da5d590cd462ce"
+      },
+      "processing": "enhanced",
+      "levers": {
+        "hash": "c4f971ebcfdfcd397feaa1e39d4d0cfb50a3792c94ad7acb534cbbc2e33e68ff",
+        "size": [2880, 1800]
+      },
+      "role": {
+        "name": "candidate",
+        "differences": []
+      }
+    },
+    {
+      "id": "weather-g5-inside",
+      "arm": "volume",
+      "file": "weather-g5-inside-volume.png",
+      "sha256": "6b9cbd892f04e717d66f0f1d2c6454d07c00e73a3cc5bf8306b4fd3e71b98a42",
+      "read": {
+        "boot": "booted",
+        "mode": "standard",
+        "chrome": false,
+        "port": {
+          "preset": "high",
+          "cloudType": null,
+          "overrides": {},
+          "frame": {
+            "served": "g:milky-way/s:P222_3_2_k/b:3",
+            "altitude": 1700.0147566325031,
+            "drift": 1.694430235498177e-10,
+            "eye": {
+              "x": 6379837.014756632,
+              "y": 1.2721557141048834e-10,
+              "z": 1.1192469173693098e-10
+            },
+            "sun": {
+              "x": 0.7071068014062252,
+              "y": 0.6771207899546356,
+              "z": 0.20373366736076426
+            },
+            "bodyRadius": 3922146.955680374,
+            "compression": 1,
+            "gain": [1.7947092514979648, 1.6745656754796405, 1.730364860361004],
+            "processing": "enhanced",
+            "tables": 4,
+            "frames": 1115,
+            "marches": 1116,
+            "graphVersion": 1
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 20.784609690826528,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 86087.8049279702,
+        "stance": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.29074925694059334,
+            "longitude": 0.6502740060773993,
+            "height": 1497.3663014019467,
+            "heading": 2.234021442552742,
+            "pitch": 0
+          }
+        },
+        "processing": "enhanced",
+        "sun": {
+          "elevation": 45.000001639011906,
+          "azimuth": 73.25438847358615
+        },
+        "light": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "sun": 45.00000163901189,
+          "phase": 14.66357823708469,
+          "lit": true
+        },
+        "settled": {
+          "ok": true,
+          "galaxy": {
+            "pending": false,
+            "tiles": "0/1638",
+            "survey": false
+          },
+          "terrain": {
+            "pending": 0,
+            "patches": 670,
+            "deposits": false
+          },
+          "clouds": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          }
+        },
+        "clouds": {
+          "available": true,
+          "reason": null,
+          "on": true,
+          "levers": {
+            "on": true,
+            "weather": "fair-cumulus",
+            "farFootprint": 800,
+            "lightTaps": 4,
+            "composite": "identity",
+            "force": "none",
+            "warp": 1000,
+            "scrubSeconds": 10800,
+            "flySpeed": 250,
+            "traceScale": 1,
+            "maxSteps": 192,
+            "jitterFrame": null,
+            "served": null,
+            "second": null,
+            "deck": "auto",
+            "stats": false,
+            "phaseMode": "mean",
+            "phaseBins": 4,
+            "jitter": "ign",
+            "transport": "slab",
+            "handoverBand": 2,
+            "clip": 1.25,
+            "over": "passes",
+            "sunSlices": 8,
+            "sunRamp": 16,
+            "farBlocks": 1
+          },
+          "leversHash": null,
+          "served": "g:milky-way/s:P222_3_2_k/b:3",
+          "second": null,
+          "appliedWeather": null,
+          "regime": "converging",
+          "reset": "none",
+          "extents": {
+            "render": [2880, 1800],
+            "css": [1440, 900],
+            "trace": [720, 450],
+            "history": [2880, 1800]
+          },
+          "frames": 1115,
+          "resets": 2,
+          "sinceReset": 1115,
+          "pending": {
+            "maps": false,
+            "clipmap": false,
+            "volume": false,
+            "sunDepth": false,
+            "far": false,
+            "history": false
+          },
+          "settle": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          },
+          "bytes": {
+            "depth": 20736000,
+            "march": 7776000,
+            "resolve": 82944000,
+            "history": 82944000,
+            "shadows": 25165824,
+            "total": 219565824
+          },
+          "pipelines": {
+            "render": 0,
+            "compute": 0
+          },
+          "steps": null,
+          "residual": null
+        },
+        "weather": "renderer-default",
+        "build": {
+          "id": "377787ae",
+          "tree": null
+        },
+        "cloud": {
+          "texels": 324000,
+          "share": 1,
+          "meanCloud": 0.1574346497333321,
+          "meanClear": null
+        }
+      },
+      "glory": {
+        "sunInCamera": [
+          -0.5774215052597831, 0.7071068014141528, 0.40814749375363335
+        ],
+        "antisolar": null,
+        "inFrame": false
+      },
+      "commit": "377787aed0a38c73006d28e30fea005e78ab1b75",
+      "clean": true,
+      "stance": {
+        "id": "weather-g5-inside",
+        "address": "g:milky-way/s:P222_3_2_k/b:3",
+        "pose": {
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.29074925694059334,
+            "longitude": 0.6502740060773993,
+            "height": 1497.3663014019467,
+            "heading": 2.234021442552742,
+            "pitch": 0
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 20.784609690826528,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 86087.8049279702
+      },
+      "fixtures": {
+        "references": "183b14ed95bf55ba7929e31b42aae739b4ed3f6e947d96b0089bb055eb9c9242",
+        "cornerstones": "ddcdfc2ae8b840e52528efc33cdf34a9ba524d999b7f42a670da5d590cd462ce"
+      },
+      "processing": "enhanced",
+      "levers": {
+        "hash": "6dcd7f1d507fe83b2b4f453136501bcd7627cb61ed97cb1c05397fec1bcbc3ab",
+        "size": [2880, 1800]
+      },
+      "role": {
+        "name": "candidate",
+        "differences": []
+      }
+    },
+    {
+      "id": "weather-g6-descent",
+      "arm": "volume",
+      "file": "weather-g6-descent-volume.png",
+      "sha256": "628f5ea738b1205269fd7c68831deafef467a4dfb985521ae7c43ab37b45e7a2",
+      "read": {
+        "boot": "booted",
+        "mode": "standard",
+        "chrome": false,
+        "port": {
+          "preset": "high",
+          "cloudType": null,
+          "overrides": {},
+          "frame": {
+            "served": "g:milky-way/s:P222_3_2_k/b:3",
+            "altitude": 400212.5726762982,
+            "drift": 7.275957614183426e-11,
+            "eye": {
+              "x": 6778349.572676298,
+              "y": -5.820766091346741e-11,
+              "z": 4.3655745685100555e-11
+            },
+            "sun": {
+              "x": 0.7071067871612224,
+              "y": 0.6771502715623088,
+              "z": 0.20363570726575594
+            },
+            "bodyRadius": 3922146.955680374,
+            "compression": 1,
+            "gain": [1.7947092514979648, 1.6745656754796405, 1.730364860361004],
+            "processing": "enhanced",
+            "tables": 4,
+            "frames": 663,
+            "marches": 664,
+            "graphVersion": 1
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 20.784609690826528,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 86090.56815677337,
+        "stance": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.29062177877890516,
+            "longitude": 0.6500744120490799,
+            "height": 400000,
+            "heading": 1.5707963267948966,
+            "pitch": -1.5357963267948966
+          }
+        },
+        "processing": "enhanced",
+        "sun": {
+          "elevation": 45.00000048459161,
+          "azimuth": 73.2626777078175
+        },
+        "light": {
+          "address": "g:milky-way/s:P222_3_2_k/b:3",
+          "sun": 45.0000004845916,
+          "phase": 14.663582903567754,
+          "lit": true
+        },
+        "settled": {
+          "ok": true,
+          "galaxy": {
+            "pending": false,
+            "tiles": "0/1638",
+            "survey": false
+          },
+          "terrain": {
+            "pending": 0,
+            "patches": 156,
+            "deposits": false
+          },
+          "clouds": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          }
+        },
+        "clouds": {
+          "available": true,
+          "reason": null,
+          "on": true,
+          "levers": {
+            "on": true,
+            "weather": "stratocumulus",
+            "farFootprint": 800,
+            "lightTaps": 4,
+            "composite": "identity",
+            "force": "none",
+            "warp": 1000,
+            "scrubSeconds": 10800,
+            "flySpeed": 250,
+            "traceScale": 1,
+            "maxSteps": 192,
+            "jitterFrame": null,
+            "served": null,
+            "second": null,
+            "deck": "auto",
+            "stats": false,
+            "phaseMode": "mean",
+            "phaseBins": 4,
+            "jitter": "ign",
+            "transport": "slab",
+            "handoverBand": 2,
+            "clip": 1.25,
+            "over": "passes",
+            "sunSlices": 8,
+            "sunRamp": 16,
+            "farBlocks": 1
+          },
+          "leversHash": null,
+          "served": "g:milky-way/s:P222_3_2_k/b:3",
+          "second": null,
+          "appliedWeather": null,
+          "regime": "converging",
+          "reset": "none",
+          "extents": {
+            "render": [2880, 1800],
+            "css": [1440, 900],
+            "trace": [720, 450],
+            "history": [2880, 1800]
+          },
+          "frames": 663,
+          "resets": 2,
+          "sinceReset": 663,
+          "pending": {
+            "maps": false,
+            "clipmap": false,
+            "volume": false,
+            "sunDepth": false,
+            "far": false,
+            "history": false
+          },
+          "settle": {
+            "pending": false,
+            "history": "32/32",
+            "caches": "ready"
+          },
+          "bytes": {
+            "depth": 20736000,
+            "march": 7776000,
+            "resolve": 82944000,
+            "history": 82944000,
+            "shadows": 25165824,
+            "total": 219565824
+          },
+          "pipelines": {
+            "render": 0,
+            "compute": 0
+          },
+          "steps": null,
+          "residual": null
+        },
+        "weather": "renderer-default",
+        "build": {
+          "id": "377787ae",
+          "tree": null
+        },
+        "cloud": {
+          "texels": 324000,
+          "share": 0.08956172839506173,
+          "meanCloud": 0.2308882962827848,
+          "meanClear": 0.23991608172534373
+        }
+      },
+      "glory": {
+        "sunInCamera": [
+          -0.20363570726060146, 0.7014792443473098, -0.6829783074727936
+        ],
+        "antisolar": {
+          "x": 1904.7829200668587,
+          "y": 2501.0726995771633
+        },
+        "inFrame": false
+      },
+      "commit": "377787aed0a38c73006d28e30fea005e78ab1b75",
+      "clean": true,
+      "stance": {
+        "id": "weather-g6-descent",
+        "address": "g:milky-way/s:P222_3_2_k/b:3",
+        "pose": {
+          "state": {
+            "azimuth": 0,
+            "distance": 11766440.867041122,
+            "elevation": 0.25
+          },
+          "look": {
+            "pitch": 0,
+            "yaw": 0
+          },
+          "surface": {
+            "latitude": -0.29062177877890516,
+            "longitude": 0.6500744120490799,
+            "height": 400000,
+            "heading": 1.5707963267948966,
+            "pitch": -1.5357963267948966
+          }
+        },
+        "lens": {
+          "fStop": 2.8,
+          "focalLength": 20.784609690826528,
+          "focus": null,
+          "gauge": 24,
+          "iso": 100,
+          "shutter": 0.004,
+          "zoom": 1
+        },
+        "time": 86090.56815677337
+      },
+      "fixtures": {
+        "references": "183b14ed95bf55ba7929e31b42aae739b4ed3f6e947d96b0089bb055eb9c9242",
+        "cornerstones": "ddcdfc2ae8b840e52528efc33cdf34a9ba524d999b7f42a670da5d590cd462ce"
+      },
+      "processing": "enhanced",
+      "levers": {
+        "hash": "c4f971ebcfdfcd397feaa1e39d4d0cfb50a3792c94ad7acb534cbbc2e33e68ff",
+        "size": [2880, 1800]
+      },
+      "role": {
+        "name": "candidate",
+        "differences": []
+      }
+    }
+  ],
+  "twice": [],
+  "casts": [],
+  "samples": [],
+  "refused": [],
+  "unavailable": [],
+  "urls": {
+    "weather-g1-fair-volume.png": "https://agentic-media-dumpster.jonjaques.com/2026/11/z4mxa9q655/weather-g1-fair-volume.png",
+    "weather-g2-overcast-shore-volume.png": "https://agentic-media-dumpster.jonjaques.com/2026/11/ana76z9jpz/weather-g2-overcast-shore-volume.png",
+    "weather-g3-underlit-dusk-volume.png": "https://agentic-media-dumpster.jonjaques.com/2026/11/ibfw22f38v/weather-g3-underlit-dusk-volume.png",
+    "weather-g4-over-deck-volume.png": "https://agentic-media-dumpster.jonjaques.com/2026/11/3pudqhwkr9/weather-g4-over-deck-volume.png",
+    "weather-g5-inside-volume.png": "https://agentic-media-dumpster.jonjaques.com/2026/11/xa2e42juxx/weather-g5-inside-volume.png",
+    "weather-g6-descent-volume.png": "https://agentic-media-dumpster.jonjaques.com/2026/11/c75dfsmcc9/weather-g6-descent-volume.png"
+  }
+}
