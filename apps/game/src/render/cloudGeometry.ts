@@ -4,7 +4,6 @@ import {
   atan,
   dot,
   float,
-  floor,
   max,
   min,
   normalize,
